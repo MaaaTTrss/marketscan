@@ -1093,6 +1093,8 @@ async function add(x) {
 }
 
 load();
+// Direktlink: …/#/handy öffnet die ntfy-Einrichtung
+if (location.hash === "#/handy" && !STATIC) { location.hash = "#/"; openNf(); }
 </script>
 </body>
 </html>
