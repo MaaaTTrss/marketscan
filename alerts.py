@@ -255,14 +255,15 @@ def ntfy_new_topic():
     return topic
 
 
-def send_ntfy(title, message, tags=None, priority=3):
+def send_ntfy(title, message, tags=None, priority=3, click=None):
     topic = ntfy_topic()
     if not topic:
         return False
+    body = {"topic": topic, "title": title, "message": message, "tags": tags or [], "priority": priority}
+    if click:
+        body["click"] = click   # Tippen auf die Meldung öffnet diese Seite
     try:
-        r = requests.post(NTFY_SERVER, timeout=15, json={
-            "topic": topic, "title": title, "message": message,
-            "tags": tags or [], "priority": priority})
+        r = requests.post(NTFY_SERVER, timeout=15, json=body)
         return r.ok
     except Exception as e:
         print("ntfy-Versand fehlgeschlagen:", e)

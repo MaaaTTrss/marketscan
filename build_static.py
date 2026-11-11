@@ -50,6 +50,74 @@ def get(client, url):
     return r.get_data(as_text=True)
 
 
+# ---------------------------------------------------------------- Morgenbericht
+REPORT_HOUR = 8                                      # ab dieser Uhrzeit (deutsche Zeit) einmal täglich
+REPORT_STATE = os.path.join(BASE, "report_state.json")
+FNG_DE = {"extreme fear": "extreme Angst", "fear": "Angst", "neutral": "neutral", "greed": "Gier", "extreme greed": "extreme Gier"}
+
+
+def site_url():
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    if "/" not in repo:
+        return None
+    owner, name = repo.split("/", 1)
+    return f"https://{owner.lower()}.github.io/{name}/"
+
+
+def pct(v):
+    return f"{v * 100:+.1f} %".replace(".", ",").replace("-", "−")
+
+
+def morning_report(data, now):
+    m, items = data["market"], [a for a in data["items"] if a.get("d1") is not None]
+    lines = []
+    mood = []
+    for key, label in (("crypto_fng", "Krypto"), ("stock_fng", "Aktien")):
+        f = m.get(key) or {}
+        if f.get("now") is not None:
+            mood.append(f"{label} {f['now']} ({FNG_DE.get(str(f.get('label', '')).lower(), f.get('label', ''))})")
+    if mood:
+        lines.append("Stimmung (Fear & Greed): " + " · ".join(mood))
+    if items:
+        srt = sorted(items, key=lambda a: a["d1"])
+        up = [a for a in reversed(srt) if a["d1"] > 0][:3]
+        dn = [a for a in srt if a["d1"] < 0][:3]
+        lines.append("")
+        lines.append("Letzte Tagesbewegung:")
+        if up:
+            lines.append("▲ " + " · ".join(f"{a['name']} {pct(a['d1'])}" for a in up))
+        if dn:
+            lines.append("▼ " + " · ".join(f"{a['name']} {pct(a['d1'])}" for a in dn))
+    cur = sorted(data["alerts"]["current"], key=lambda c: (c["kind"] == "info", c["prio"]))
+    lines.append("")
+    if cur:
+        lines.append(f"Gerade auffällig ({len(cur)}):")
+        for c in cur[:6]:
+            lines.append(f"{alerts.ICON.get(c['kind'], '•')} {c['name']}: {c['text']}")
+        if len(cur) > 6:
+            lines.append(f"… und {len(cur) - 6} weitere")
+    else:
+        lines.append("Gerade nichts Auffälliges.")
+    return f"☀️ Morgenbericht {now.strftime('%d.%m.')}", "\n".join(lines)
+
+
+def maybe_send_report(data, now):
+    force = os.environ.get("FORCE_REPORT") == "1"
+    today = now.strftime("%Y-%m-%d")
+    last = json.load(open(REPORT_STATE)).get("last") if os.path.exists(REPORT_STATE) else None
+    if not force and (now.hour < REPORT_HOUR or last == today):
+        return
+    title, msg = morning_report(data, now)
+    if os.environ.get("RADAR_TEST") == "1":
+        print("--- Morgenbericht (nur Vorschau) ---\n" + title + "\n" + msg)
+        return
+    ok = alerts.send_ntfy(title, msg, tags=["sunny"], click=site_url())
+    print("Morgenbericht gesendet" if ok else "Morgenbericht: Senden fehlgeschlagen (NTFY_TOPIC gesetzt?)")
+    if ok and not force:
+        with open(REPORT_STATE, "w") as f:
+            json.dump({"last": today}, f)
+
+
 def main():
     t0 = time.time()
     if os.path.exists(OUT):
@@ -68,6 +136,7 @@ def main():
     data["built_ts"] = int(time.time())
     write("data.json", data)
     print(f"Übersicht: {len(data['items'])} Werte, {len(data['alerts']['current'])} gerade auffällig")
+    maybe_send_report(data, now)
 
     # 2) Detailseiten + News je Wert
     for w in wl:

@@ -8,6 +8,11 @@ on:
   push:
     branches: [main]            # z. B. wenn am Mac ein Wert hinzugefügt wurde
   workflow_dispatch:            # Knopf "Run workflow" auf GitHub
+    inputs:
+      report:
+        description: "Morgenbericht jetzt sofort schicken (zum Testen)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write               # nur für den monatlichen "Bin noch da"-Eintrag (siehe unten)
@@ -29,6 +34,7 @@ jobs:
       TZ: Europe/Berlin
       NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
       RADAR_NO_BROWSER: "1"
+      FORCE_REPORT: ${{ inputs.report && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -46,6 +52,7 @@ jobs:
           path: |
             alerts_state.json
             alerts_log.json
+            report_state.json
             .cache/backtest
           key: radar-state-${{ github.run_id }}
           restore-keys: radar-state-
@@ -58,6 +65,7 @@ jobs:
           path: |
             alerts_state.json
             alerts_log.json
+            report_state.json
             .cache/backtest
           key: radar-state-${{ github.run_id }}-${{ github.run_attempt }}
 
