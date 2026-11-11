@@ -1,0 +1,86 @@
+[
+  {
+    "symbol": "BTC-USD",
+    "name": "Bitcoin",
+    "group": "crypto",
+    "currency": "USD"
+  },
+  {
+    "symbol": "ETH-USD",
+    "name": "Ethereum",
+    "group": "crypto",
+    "currency": "USD"
+  },
+  {
+    "symbol": "SOL-USD",
+    "name": "Solana",
+    "group": "crypto",
+    "currency": "USD"
+  },
+  {
+    "symbol": "XRP-USD",
+    "name": "XRP",
+    "group": "crypto",
+    "currency": "USD"
+  },
+  {
+    "symbol": "BNB-USD",
+    "name": "BNB",
+    "group": "crypto",
+    "currency": "USD"
+  },
+  {
+    "symbol": "NVDA",
+    "name": "Nvidia",
+    "group": "stock",
+    "currency": "USD"
+  },
+  {
+    "symbol": "AAPL",
+    "name": "Apple",
+    "group": "stock",
+    "currency": "USD"
+  },
+  {
+    "symbol": "MSFT",
+    "name": "Microsoft",
+    "group": "stock",
+    "currency": "USD"
+  },
+  {
+    "symbol": "AMZN",
+    "name": "Amazon",
+    "group": "stock",
+    "currency": "USD"
+  },
+  {
+    "symbol": "GOOGL",
+    "name": "Alphabet",
+    "group": "stock",
+    "currency": "USD"
+  },
+  {
+    "symbol": "META",
+    "name": "Meta",
+    "group": "stock",
+    "currency": "USD"
+  },
+  {
+    "symbol": "TSLA",
+    "name": "Tesla",
+    "group": "stock",
+    "currency": "USD"
+  },
+  {
+    "symbol": "SPY",
+    "name": "S&P 500",
+    "group": "etf",
+    "currency": "USD"
+  },
+  {
+    "symbol": "QQQ",
+    "name": "Nasdaq 100",
+    "group": "etf",
+    "currency": "USD"
+  }
+]

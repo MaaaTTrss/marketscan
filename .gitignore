@@ -1,0 +1,11 @@
+.env
+.venv/
+__pycache__/
+trades.csv
+alerts_state.json
+alerts_log.json
+site/
+.cache/
+settings.json
+*.log
+.DS_Store

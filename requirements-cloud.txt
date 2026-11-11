@@ -1,0 +1,6 @@
+# Nur das, was der Radar in der Cloud (GitHub) braucht
+yfinance
+pandas
+requests
+flask
+python-dotenv

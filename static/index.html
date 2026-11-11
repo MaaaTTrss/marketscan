@@ -1,0 +1,1098 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Markt-Radar</title>
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Radar">
+<link rel="apple-touch-icon" href="/static/icon-180.png">
+<link rel="icon" type="image/png" href="/static/icon-192.png">
+<link rel="manifest" id="mf" href="/manifest.webmanifest">
+<link rel="stylesheet" href="/static/base.css">
+<style>
+.topbar{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:8px}
+.live{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted);flex-wrap:wrap}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--good);box-shadow:0 0 0 0 var(--good);animation:pulse 2s infinite}
+.dot.busy{background:var(--mid)}.dot.err{background:var(--bad);animation:none}
+@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--good) 60%,transparent)}70%{box-shadow:0 0 0 8px transparent}100%{box-shadow:0 0 0 0 transparent}}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:8px;padding:6px 12px}
+button:hover{border-color:var(--accent)}
+.search{position:relative;flex:1;min-width:260px;max-width:520px}
+.search input{width:100%;font:inherit;padding:10px 14px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--fg)}
+.search input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.results{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--card);border:1px solid var(--line);border-radius:10px;
+  box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:10;max-height:380px;overflow:auto;display:none}
+.results.open{display:block}
+.res{display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--line)}
+.res:last-child{border-bottom:0}.res:hover,.res.active{background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.res .sym{font-weight:600;min-width:90px}.res .nm{flex:1;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.res .ex{font-size:11px;color:var(--muted)}
+.kind{font-size:10px;font-weight:600;padding:2px 7px;border-radius:999px;background:var(--line);color:var(--fg);white-space:nowrap}
+.res .added{font-size:11px;color:var(--good)}
+.rm{border:0;background:none;color:var(--muted);font-size:16px;padding:2px 6px;opacity:.5}
+.rm:hover{opacity:1;color:var(--bad)}
+.flash-up{animation:fu 1.6s}.flash-down{animation:fd 1.6s}
+@keyframes fu{0%{background:var(--good-bg)}100%{background:transparent}}
+@keyframes fd{0%{background:var(--bad-bg)}100%{background:transparent}}
+.empty{color:var(--muted);padding:12px 0}
+.loading{padding:60px 0;text-align:center;color:var(--muted)}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:10px;
+  font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20}
+.toast.show{opacity:1}
+.sortable th[data-col]::after{content:"";margin-left:3px}
+.sortable th[data-dir=asc]::after{content:"▲";font-size:9px}.sortable th[data-dir=desc]::after{content:"▼";font-size:9px}
+.alerts{display:grid;grid-template-columns:1.3fr 1fr;gap:16px}
+@media (max-width:800px){.alerts{grid-template-columns:1fr}}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;font-size:12px;cursor:pointer;border:1px solid transparent}
+.chip b{font-weight:600}.chip.good{background:var(--good-bg);color:var(--good)}.chip.bad{background:var(--bad-bg);color:var(--bad)}
+.chip.info{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent)}
+.chip:hover{border-color:currentColor}
+.log{list-style:none;margin:0;padding:0;max-height:210px;overflow:auto;font-size:12px}
+.log li{display:flex;gap:8px;padding:5px 0;border-bottom:1px solid var(--line)}.log li:last-child{border:0}
+.log .t{color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.k-good{color:var(--good)}.k-bad{color:var(--bad)}.k-info{color:var(--accent)}
+.ctrl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:12px}
+.ctrl label{display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--fg)}
+.ctrl button{font-size:12px;padding:4px 10px}
+.newsbar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.nchip{padding:4px 10px;border-radius:999px;font-size:12px;border:1px solid var(--line);cursor:pointer;background:var(--card)}
+.nchip.on{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.lang{margin-left:auto;display:flex;gap:4px}
+.news{list-style:none;margin:0;padding:0}
+.news li{padding:10px 0;border-bottom:1px solid var(--line)}.news li:last-child{border:0}
+.news a{color:var(--fg);text-decoration:none;font-weight:500}.news a:hover{color:var(--accent);text-decoration:underline}
+.news .meta{font-size:12px;color:var(--muted);margin-top:2px}
+.nm-link{cursor:pointer}.nm-link:hover b{color:var(--accent);text-decoration:underline}
+h3 .sub{font-weight:400}
+.viz{--c1:#2a78d6;--c2:#eb6834;--c3:#1baf7a;--s-hold:#52514e;--s-sel:#2a78d6;--s-other:#c9c8c2;--grid:#e8e7e3}
+@media (prefers-color-scheme:dark){.viz{--c1:#3987e5;--c2:#d95926;--c3:#199e70;--s-hold:#c3c2b7;--s-sel:#3987e5;--s-other:#3a3a37;--grid:#2a2a28}}
+.btbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.btbar select{font:inherit;padding:6px 10px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--fg)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0;padding:6px 12px}.seg button.on{background:var(--fg);color:var(--bg)}
+.btprimary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.verdict{font-size:14px;line-height:1.55;margin:0 0 14px;padding:12px 14px;border-radius:10px;background:color-mix(in srgb,var(--accent) 9%,transparent)}
+.chartwrap{position:relative}
+.chartwrap svg{display:block;width:100%;height:auto;overflow:visible}
+.chartwrap .ax{font-size:11px;fill:var(--muted)}
+.chartwrap .lbl{font-size:11px;fill:var(--fg);font-weight:600}
+.tip{position:absolute;pointer-events:none;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;
+  box-shadow:0 6px 18px rgba(0,0,0,.15);display:none;white-space:nowrap;z-index:5}
+.tip .sw{display:inline-block;width:10px;height:2px;vertical-align:middle;margin-right:6px}
+.lgd{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:6px 0 10px}
+.lgd span{display:flex;align-items:center;gap:6px}.lgd i{display:inline-block;width:16px;height:2px}
+tr.btrow{cursor:pointer}tr.btrow:hover td{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+tr.btrow.sel td{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+tr.btrow td .sub{white-space:normal;max-width:340px}
+.beat{font-size:10px;font-weight:600;padding:1px 6px;border-radius:999px;background:var(--good-bg);color:var(--good);margin-left:6px}
+dialog{border:1px solid var(--line);border-radius:14px;background:var(--card);color:var(--fg);padding:22px;max-width:520px;width:calc(100% - 32px)}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+dialog h3{font-size:17px;margin:0 0 4px}
+.step{display:flex;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+.step .n{flex:none;width:24px;height:24px;border-radius:50%;background:var(--line);display:grid;place-items:center;font-size:12px;font-weight:700}
+.step.done .n{background:var(--good-bg);color:var(--good)}
+.step p{margin:0 0 8px;font-size:13px}.step code{background:var(--line);padding:1px 5px;border-radius:4px}
+.step input{width:100%;font:inherit;font-size:13px;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg);margin-bottom:8px}
+.step a{color:var(--accent)}
+.msg{font-size:12px;margin-top:4px}.msg.err{color:var(--bad)}.msg.ok{color:var(--good)}
+.tgstate{font-size:12px}.tgstate.on{color:var(--good)}
+.tabs{display:flex;gap:4px;margin:16px 0 4px;overflow-x:auto;border-bottom:1px solid var(--line)}
+.tabs a{padding:10px 14px;color:var(--muted);text-decoration:none;font-weight:600;font-size:14px;border-bottom:2px solid transparent;white-space:nowrap;margin-bottom:-1px}
+.tabs a:hover{color:var(--fg)}.tabs a.on{color:var(--fg);border-bottom-color:var(--accent)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;cursor:pointer;text-decoration:none;color:var(--fg);display:block;transition:border-color .15s,transform .15s}
+.tile:hover{border-color:var(--accent);transform:translateY(-2px)}
+.tile .ic{font-size:26px}.tile h3{font-size:17px;margin:6px 0 2px}.tile .kv{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-top:1px solid var(--line)}
+.tile .kv:first-of-type{border-top:0}.tile .go{font-size:12px;color:var(--accent);margin-top:8px}
+.movers{display:grid;grid-template-columns:1fr 1fr;gap:16px}@media (max-width:700px){.movers{grid-template-columns:1fr}}
+.mv{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--line);text-decoration:none;color:var(--fg)}
+.mv:last-child{border:0}.mv:hover b{color:var(--accent)}
+.crumb{font-size:13px;margin:14px 0 0}.crumb a{color:var(--accent);text-decoration:none}
+.dhead{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin:6px 0 4px}
+.dhead h2{margin:0;font-size:24px}.dprice{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums}
+.sigs{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.sig{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.sig .t{font-size:12px;color:var(--muted);display:flex;justify-content:space-between;gap:6px}.sig .v{font-size:20px;font-weight:700;margin:4px 0}
+.sig p{font-size:12px;color:var(--muted);margin:0}.sig.z{opacity:.8}
+.ranges{display:flex;gap:4px;flex-wrap:wrap}.ranges button{font-size:12px;padding:4px 10px}.ranges button.on{background:var(--fg);color:var(--bg)}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:2px 18px;margin-top:10px}
+.facts div{display:flex;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px}
+.facts span{color:var(--muted)}
+.summary{font-size:13px;line-height:1.6;color:var(--muted);max-height:7.2em;overflow:hidden;position:relative}
+.summary.open{max-height:none}
+.linkbtn{background:none;border:0;color:var(--accent);padding:0;font-size:12px}
+.go-row{cursor:pointer}
+.brand{display:inline-flex;align-items:center;gap:12px;text-decoration:none;color:var(--fg);--b1:#22c55e;--b2:#3b82f6}
+@media (prefers-color-scheme:dark){.brand{--b1:#4ade80;--b2:#60a5fa}}
+.brand .radar{width:44px;height:44px;flex:none;border-radius:50%;background:radial-gradient(circle,color-mix(in srgb,var(--b1) 14%,transparent),transparent 70%)}
+.brand .ring{fill:none;stroke:var(--b1);stroke-opacity:.35;stroke-width:1}
+.brand .sweep{transform-origin:24px 24px;animation:sweep 4s linear infinite}
+.brand .blip{fill:var(--b1);opacity:0;animation:blip 4s linear infinite}
+.brand .b1{animation-delay:.55s}.brand .b2{animation-delay:2.6s}.brand .b3{animation-delay:1.7s}
+@keyframes sweep{to{transform:rotate(360deg)}}
+@keyframes blip{0%{opacity:1}60%{opacity:.15}100%{opacity:0}}
+.brand .wordmark{font-size:28px;font-weight:800;letter-spacing:-.02em;line-height:1;
+  background:linear-gradient(90deg,var(--b1),var(--b2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.brand .dash{color:var(--muted);-webkit-text-fill-color:var(--muted);margin:0 2px;font-weight:400}
+.brand:hover .wordmark{filter:brightness(1.15)}
+@media (prefers-reduced-motion:reduce){.brand .sweep,.brand .blip{animation:none}.brand .blip{opacity:.8}}
+.topicbox{display:flex;align-items:center;gap:8px;margin:6px 0 8px}
+.topicbox code{font-size:18px;font-weight:700;letter-spacing:.04em;padding:6px 10px;background:var(--line);border-radius:8px;user-select:all}
+.qrwrap{display:flex;gap:14px;align-items:center;margin-top:6px}.qrwrap img{width:120px;height:120px;background:#fff;border-radius:8px;padding:4px}
+.stores{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}.stores a{font-size:13px;padding:6px 12px;border:1px solid var(--line);border-radius:8px;color:var(--fg);text-decoration:none}
+.stores a:hover{border-color:var(--accent)}
+.tabs a{display:inline-flex;align-items:center;gap:7px}.tabs .ico{width:18px;height:18px;flex:none}
+.tile .ic .ico{width:44px;height:44px;display:block;filter:drop-shadow(0 4px 10px rgba(0,0,0,.18))}
+.tile:hover .ic .ico{transform:rotate(-6deg) scale(1.06);transition:transform .2s}
+.tile .ic .ico-crypto{animation:coinspin 6s ease-in-out infinite}
+@keyframes coinspin{0%,80%{transform:rotateY(0)}90%{transform:rotateY(180deg)}100%{transform:rotateY(360deg)}}
+@media (prefers-reduced-motion:reduce){.tile .ic .ico-crypto{animation:none}}
+h2 .count{font-size:13px;color:var(--muted);font-weight:400;margin-left:6px}
+.static .rm{display:none}
+/* Handy */
+body{padding-top:max(24px,env(safe-area-inset-top));padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}
+@media (max-width:600px){
+  body{padding-top:max(12px,env(safe-area-inset-top));padding-bottom:max(32px,env(safe-area-inset-bottom))}
+  .topbar{gap:10px}.topbar>div:first-child{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%}
+  .live{font-size:11px;margin:0;flex-wrap:nowrap;gap:6px;min-width:0}.live #status{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
+  #refresh{font-size:0;padding:6px 9px}#refresh::before{content:"↻";font-size:15px}
+  .search{min-width:0;max-width:none}
+  body>.legend .pill{font-size:11px;padding:1px 7px}
+  .brand{gap:8px}.brand .radar{width:34px;height:34px}.brand .wordmark{font-size:22px}
+  .tabs{margin-top:10px}.tabs a{padding:9px 10px}
+  h2{margin-top:22px}
+}
+</style>
+</head>
+<body>
+<script>{const k=new URLSearchParams(location.search).get("k");if(k)document.getElementById("mf").href="/manifest.webmanifest?k="+encodeURIComponent(k);}</script>
+<div class="topbar">
+  <div><a href="#/" class="brand" title="Zur Startseite">
+      <svg class="radar" viewBox="0 0 48 48" aria-hidden="true">
+        <defs><linearGradient id="sweepG" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="var(--b1)" stop-opacity="0"/><stop offset="1" stop-color="var(--b1)" stop-opacity=".55"/></linearGradient></defs>
+        <circle cx="24" cy="24" r="22" class="ring"/><circle cx="24" cy="24" r="14.5" class="ring"/><circle cx="24" cy="24" r="7" class="ring"/>
+        <line x1="2" y1="24" x2="46" y2="24" class="ring"/><line x1="24" y1="2" x2="24" y2="46" class="ring"/>
+        <g class="sweep"><path d="M24 24 L24 2 A22 22 0 0 1 43.05 13 Z" fill="url(#sweepG)"/><line x1="24" y1="24" x2="24" y2="2" stroke="var(--b1)" stroke-width="1.6"/></g>
+        <circle cx="33" cy="15" r="2.2" class="blip b1"/><circle cx="14" cy="30" r="1.8" class="blip b2"/><circle cx="31" cy="34" r="1.6" class="blip b3"/>
+        <circle cx="24" cy="24" r="1.8" fill="var(--b1)"/>
+      </svg>
+      <span class="wordmark">Markt<span class="dash">·</span>Radar</span></a>
+    <div class="live"><span class="dot busy" id="dot"></span><span id="status">Lade Daten …</span>
+      <button id="refresh" title="Jetzt aktualisieren">↻ Aktualisieren</button></div>
+  </div>
+  <div class="search">
+    <input id="q" type="search" placeholder="Wert hinzufügen: z. B. Dogecoin, Rheinmetall, MSCI World …" autocomplete="off">
+    <div class="results" id="results"></div>
+  </div>
+</div>
+<div class="legend" style="margin:6px 0 0"><span class="pill good">spricht eher für Kauf</span><span class="pill mid">neutral</span><span class="pill bad">eher Vorsicht</span></div>
+
+<nav class="tabs" id="tabs">
+  <a href="#/" data-r="start">Start</a><a href="#/krypto" data-r="krypto" data-ic="crypto">Krypto</a><a href="#/aktien" data-r="aktien" data-ic="stock">Aktien</a>
+  <a href="#/etfs" data-r="etfs" data-ic="etf">ETFs &amp; Indizes</a><a href="#/vergleich" data-r="vergleich" data-ic="lab">Strategie-Vergleich</a><a href="#/info" data-r="info" data-ic="info">Datenquellen</a>
+</nav>
+<div id="top"></div>
+<div id="alerts"></div>
+<div id="app"><div class="loading">Kurse werden geladen – beim ersten Start kann das 10–20 Sekunden dauern …</div></div>
+<section id="btSec" style="display:none"><h2>Strategie-Vergleich</h2><div class="card">
+  <div class="btbar"><select id="btSym"></select>
+    <span class="seg"><button data-mode="lump" class="on">Einmalanlage 10.000</button><button data-mode="saving">Sparplan 500/Monat</button></span>
+    <button id="btRun" class="btprimary">Vergleich starten</button></div>
+  <div id="btOut" class="muted viz">Wert auswählen und „Vergleich starten“ klicken. Getestet wird mit echten Tageskursen der Vergangenheit
+    (Aktien/ETFs ab 2015, Krypto ab 2018), inklusive Gebühren und ohne Blick in die Zukunft.</div>
+</div></section>
+<section id="newsSec" style="display:none"><h2>News</h2><div class="card">
+  <div class="newsbar" id="newsbar"></div>
+  <div id="newslist" class="muted">Wert auswählen …</div>
+  <p class="note">Schlagzeilen über Google News, nach Aktualität sortiert.</p>
+</div></section>
+<div id="explain"></div>
+<div class="toast" id="toast"></div>
+<dialog id="nfDlg">
+  <h3>📱 Benachrichtigungen aufs Handy</h3>
+  <p class="muted" style="font-size:13px;margin:0 0 8px">Mit der kostenlosen App <b>ntfy</b> – ohne Konto, ohne Telefonnummer, dauert etwa 1 Minute.</p>
+  <div class="step"><span class="n">1</span><div style="flex:1"><p><b>App „ntfy“ installieren</b></p>
+    <div class="stores"><a href="https://apps.apple.com/app/ntfy/id1625396347" target="_blank" rel="noopener"> iPhone (App Store)</a>
+      <a href="https://play.google.com/store/apps/details?id=io.heckel.ntfy" target="_blank" rel="noopener">▶ Android (Google Play)</a></div></div></div>
+  <div class="step"><span class="n">2</span><div style="flex:1"><p>In der App auf <b>„+“</b> tippen (Thema abonnieren) und genau diesen <b>Kanalnamen</b> eingeben. Server-Einstellung nicht ändern.</p>
+    <div class="topicbox"><code id="nfTopic">…</code><button id="nfCopy">Kopieren</button></div>
+    <div class="qrwrap"><img id="nfQr" alt="QR-Code zum Kanal"><p class="muted" style="font-size:12px;margin:0">Android: Code mit der Kamera scannen öffnet den Kanal direkt.<br>iPhone: Kanalnamen in der App eintippen – das ist am zuverlässigsten.</p></div></div></div>
+  <div class="step"><span class="n">3</span><div style="flex:1"><p>Test senden – nach ein paar Sekunden sollte es auf dem Handy klingeln. Beim ersten Mal fragt das Handy, ob ntfy Mitteilungen senden darf: <b>Erlauben</b>.</p>
+    <button id="nfTest" class="btprimary">Test senden</button><div class="msg" id="nfMsg"></div></div></div>
+  <p class="note">Der Kanalname ist zufällig und nicht erratbar – wie ein Passwort: nicht weitergeben. Die Nachrichten laufen über den Server ntfy.sh und enthalten nur Markt-Meldungen.
+    <button class="linkbtn" id="nfNew">Neuen Kanalnamen erzeugen</button> · <button class="linkbtn" id="nfToTg">Lieber Telegram?</button></p>
+  <div style="text-align:right;margin-top:10px"><button id="nfClose">Schließen</button></div>
+</dialog>
+<dialog id="phDlg">
+  <h3>📲 Radar auf dem Handy öffnen</h3>
+  <p class="muted" style="font-size:13px;margin:0 0 8px">Funktioniert, solange Handy und Mac im <b>selben WLAN</b> sind und der Radar auf dem Mac läuft.</p>
+  <div class="step"><span class="n">1</span><div style="flex:1"><p>Mit der <b>Handy-Kamera</b> diesen Code scannen und den Link öffnen.</p>
+    <div class="qrwrap"><img id="phQr" alt="QR-Code zum Radar" style="width:170px;height:170px"><p class="muted" style="font-size:12px;margin:0">Oder diese Adresse im Handy-Browser eingeben:<br><code id="phUrl" style="word-break:break-all">…</code></p></div></div></div>
+  <div class="step"><span class="n">2</span><div style="flex:1"><p><b>Wie eine App auf den Startbildschirm legen:</b><br>
+    iPhone (Safari): Teilen-Symbol <b>□↑</b> → „Zum Home-Bildschirm“.<br>Android (Chrome): Menü <b>⋮</b> → „Zum Startbildschirm hinzufügen“.</p></div></div>
+  <p class="note">Der Link enthält einen geheimen Schlüssel – nur wer ihn hat, kommt im WLAN an deinen Radar. Nicht weitergeben.
+    Fragt der Mac beim Start, ob „Python“ eingehende Verbindungen annehmen darf: <b>Erlauben</b>, sonst erreicht das Handy den Radar nicht.
+    <button class="linkbtn" id="phNew">Neuen Schlüssel erzeugen</button> (alte Handy-Links funktionieren dann nicht mehr)</p>
+  <div class="msg" id="phMsg"></div>
+  <div style="text-align:right;margin-top:10px"><button id="phClose">Schließen</button></div>
+</dialog>
+<dialog id="tgDlg">
+  <h3>📱 Benachrichtigungen aufs Handy</h3>
+  <p class="muted" style="font-size:13px;margin:0 0 8px">Über Telegram – kostenlos, dauert etwa 2 Minuten. Du brauchst die Telegram-App auf dem Handy.</p>
+  <div class="step" id="st1"><span class="n">1</span><div style="flex:1">
+    <p>In Telegram den offiziellen Chat <a href="https://t.me/BotFather" target="_blank" rel="noopener"><b>@BotFather</b></a> öffnen, <code>/newbot</code> senden,
+    einen Namen (z. B. „Mein Markt-Radar“) und einen Benutzernamen, der auf <code>bot</code> endet, wählen.
+    BotFather schickt dir dann einen <b>Token</b> (sieht aus wie <code>123456:ABC-…</code>). Kopier ihn hier rein:</p>
+    <input id="tgToken" placeholder="Token hier einfügen" autocomplete="off" spellcheck="false">
+    <button id="tgSave">Token speichern</button><div class="msg" id="m1"></div></div></div>
+  <div class="step" id="st2"><span class="n">2</span><div style="flex:1">
+    <p>Öffne deinen neuen Bot <span id="tgLink" class="muted">(erscheint nach Schritt 1)</span> und drück auf <b>Start</b>.</p></div></div>
+  <div class="step" id="st3"><span class="n">3</span><div style="flex:1">
+    <p>Dann hier verbinden – du bekommst sofort eine Bestätigung aufs Handy.</p>
+    <button id="tgConnect" class="btprimary">Verbinden</button> <button id="tgTest">Test senden</button><div class="msg" id="m3"></div></div></div>
+  <p class="note">Der Token wird nur lokal in der Datei <code>.env</code> in deinem Projektordner gespeichert. Nachrichten kommen, solange der Radar auf dem Mac läuft und der Mac wach ist.</p>
+  <div style="text-align:right;margin-top:10px"><button id="tgClose">Schließen</button></div>
+</dialog>
+
+<script>
+// Cloud-Modus (GitHub Pages): keine eigene Server-Logik, sondern fertige Dateien aus data/
+const STATIC = !!window.RADAR_STATIC;
+if (STATIC) document.body.classList.add("static");
+if (STATIC) document.getElementById("q").placeholder = "Wert in deiner Liste suchen …";
+const sfn = s => s.replace(/[^A-Za-z0-9._-]/g, c => "_" + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0"));
+function apiUrl(path) {
+  if (!STATIC) return path;
+  const u = new URL(path, location.origin), p = u.searchParams, t = "?t=" + Math.floor(Date.now() / 60000);
+  if (u.pathname === "/api/data") return "data/data.json" + t;
+  if (u.pathname === "/api/asset") return `data/asset/${sfn(p.get("symbol"))}.json` + t;
+  if (u.pathname === "/api/news") return `data/news/${sfn(p.get("symbol"))}-${p.get("lang")}.json` + t;
+  if (u.pathname === "/api/backtest") return `data/backtest/${sfn(p.get("symbol"))}.json` + t;
+  return path;
+}
+const REFRESH_SEC = STATIC ? 300 : 60;
+let DATA = null, prevPrices = {}, sortState = {}, countdown = REFRESH_SEC, loading = false;
+
+// ---------- Formatierung
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pct = (v, d = 1, sign = true) => v == null ? "–" :
+  (sign && v > 0 ? "+" : "") + (v * 100).toLocaleString("de-DE", {minimumFractionDigits: d, maximumFractionDigits: d}) + " %";
+const num = (v, d = 1) => v == null ? "–" : v.toLocaleString("de-DE", {minimumFractionDigits: d, maximumFractionDigits: d});
+function money(v, cur) {
+  if (v == null) return "–";
+  const d = v >= 1000 ? 0 : v >= 1 ? 2 : 4;
+  try { return v.toLocaleString("de-DE", {style: "currency", currency: cur || "USD", minimumFractionDigits: d, maximumFractionDigits: d}); }
+  catch { return num(v, d) + " " + (cur || ""); }
+}
+const dv = v => v == null ? -1e12 : v;
+
+// ---------- Zellen
+function spark(arr, w = 120, h = 32, cls = "spark") {
+  if (!arr || arr.length < 2) return "";
+  const lo = Math.min(...arr), hi = Math.max(...arr), r = (hi - lo) || 1;
+  const pts = arr.map((v, i) => `${(i * w / (arr.length - 1)).toFixed(1)},${(h - 2 - (v - lo) / r * (h - 4)).toFixed(1)}`).join(" ");
+  const col = arr[arr.length - 1] >= arr[0] ? "var(--good)" : "var(--bad)";
+  return `<svg class="${cls}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.5"/></svg>`;
+}
+const chg = v => `<td class="num ${v == null ? "" : v > 0 ? "up" : "down"}" data-v="${dv(v)}">${pct(v)}</td>`;
+function trend(a) {
+  if (!a.trend) return `<td data-v="-1e12"><span class="sub">zu wenig Daten</span></td>`;
+  const [l, c] = {auf: ["Aufwärts", "good"], ab: ["Abwärts", "bad"], gemischt: ["Gemischt", "mid"]}[a.trend];
+  return `<td data-v="${a.vs200}"><span class="pill ${c}">${l}</span><div class="sub">${pct(a.vs200, 0)} ggü. 200T</div></td>`;
+}
+function rsi(v) {
+  if (v == null) return `<td data-v="-1e12">–</td>`;
+  const [c, l] = v < 30 ? ["good", "überverkauft"] : v > 70 ? ["bad", "überkauft"] : ["mid", "neutral"];
+  return `<td data-v="${v}"><span class="pill ${c}">${Math.round(v)}</span><div class="sub">${l}</div></td>`;
+}
+const dd = v => `<td data-v="${v}"><div class="num">${pct(v, 0)}</div><div class="bar"><span style="width:${Math.min(100, Math.abs(v) * 100).toFixed(0)}%"></span></div></td>`;
+function rev(v, th) {
+  if (v == null) return `<td class="z">–</td>`;
+  return `<td class="z num ${v > 0 ? "up" : "down"}" data-v="${v}">${pct(v)}${v < -th ? '<div class="sub">stark gefallen</div>' : ""}</td>`;
+}
+const mom = v => `<td class="z num" data-v="${dv(v)}">${pct(v, 0)}</td>`;
+function graded(v, good, bad, fmt, lowBetter = true) {
+  if (v == null) return `<td class="num" data-v="-1e12">–</td>`;
+  let c = lowBetter ? (v <= good ? "good" : v >= bad ? "bad" : "mid") : (v >= good ? "good" : v <= bad ? "bad" : "mid");
+  if (v < 0 && lowBetter) c = "bad";
+  return `<td class="num" data-v="${v}"><span class="pill ${c}">${fmt(v)}</span></td>`;
+}
+function nameCell(a) {
+  const short = a.symbol.replace(/-USD$/, "");
+  return `<td data-v="${esc(a.name.toLowerCase())}" class="nm-link" data-go="#/wert/${encodeURIComponent(a.symbol)}" title="Einzelanalyse öffnen"><b>${esc(a.name)}</b><div class="sub">${esc(short)}${a.currency && a.currency !== "USD" ? " · " + esc(a.currency) : ""}</div></td>`;
+}
+const priceCell = a => `<td class="num" data-v="${a.price}" data-sym="${esc(a.symbol)}">${money(a.price, a.currency)}</td>`;
+const rmCell = a => `<td><button class="rm" title="Entfernen" data-rm="${esc(a.symbol)}">×</button></td>`;
+const errRow = (a, cols) => `<tr>${nameCell(a)}<td colspan="${cols}" class="muted">${esc(a.error)}</td>${rmCell(a)}</tr>`;
+
+// ---------- Tabellen
+function th(label, col, extra = "", attrs = "") {
+  return `<th ${col != null ? `data-col="${col}"` : ""} ${attrs}>${label}${extra}</th>`;
+}
+const EV = {s: '<span class="ev ev-s">stark</span>', m: '<span class="ev ev-m">mittel</span>', w: '<span class="ev ev-w">schwach</span>'};
+const Z = '<br><span class="tag">Zusatz</span>';
+
+function cryptoTable(items) {
+  const rows = items.map(a => a.error ? errRow(a, 10) : `<tr>${nameCell(a)}${priceCell(a)}${chg(a.d1)}${chg(a.d7)}${chg(a.d30)}
+    <td>${spark(a.spark)}</td>${dd(a.dd)}${trend(a)}${rsi(a.rsi)}${mom(a.mom)}${rev(a.d7, .10)}${rmCell(a)}</tr>`).join("");
+  return `<table class="data sortable" data-t="crypto"><thead><tr>${th("Coin", 0)}${th("Kurs", 1)}${th("1 Tag", 2)}${th("7 Tage", 3)}${th("30 Tage", 4)}
+    ${th("1 Jahr")}${th("vom Hoch", 6)}${th("Trend ", 7, EV.s)}${th("RSI ", 8, EV.w)}${th("Momentum", 9, Z, 'class="z"')}${th("Umkehr 1W", 10, Z, 'class="z"')}<th></th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+function stockTable(items) {
+  const rows = items.map(a => {
+    if (a.error) return errRow(a, 15);
+    const f = a.fund || {};
+    return `<tr>${nameCell(a)}${priceCell(a)}${chg(a.d1)}${chg(a.d30)}<td>${spark(a.spark)}</td>${dd(a.dd)}${trend(a)}${rsi(a.rsi)}
+      ${graded(f.pe, 15, 35, v => num(v))}${graded(f.fpe, 15, 30, v => num(v))}${graded(f.pb, 3, 15, v => num(v))}
+      ${graded(f.roe, .15, .05, v => pct(v, 0, false), false)}${graded(f.margin, .15, .05, v => pct(v, 0, false), false)}${graded(f.de, .5, 2, v => num(v, 2))}
+      ${mom(a.mom)}${rev(a.d7, .05)}${rmCell(a)}</tr>`;
+  }).join("");
+  return `<table class="data sortable" data-t="stock"><thead>
+    <tr>${th("Aktie", 0, "", 'rowspan="2"')}${th("Kurs", 1, "", 'rowspan="2"')}${th("1 Tag", 2, "", 'rowspan="2"')}${th("30 Tage", 3, "", 'rowspan="2"')}${th("1 Jahr", null, "", 'rowspan="2"')}
+    ${th("vom Hoch", 5, "", 'rowspan="2"')}${th("Trend ", 6, EV.s, 'rowspan="2"')}${th("RSI ", 7, EV.w, 'rowspan="2"')}
+    <th colspan="3" class="grp">Value – wie günstig? ${EV.m}</th><th colspan="3" class="grp">Qualität – wie solide? ${EV.m}</th>
+    ${th("Momentum", 14, Z, 'rowspan="2" class="z"')}${th("Umkehr 1W", 15, Z, 'rowspan="2" class="z"')}<th rowspan="2"></th></tr>
+    <tr>${th("KGV", 8)}${th("KGV erw.", 9)}${th("KBV", 10)}${th("EK-Rendite", 11)}${th("Marge", 12)}${th("Schulden/EK", 13)}</tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+function etfTable(items) {
+  const rows = items.map(a => a.error ? errRow(a, 10) : `<tr>${nameCell(a)}${priceCell(a)}${chg(a.d1)}${chg(a.d7)}${chg(a.d30)}
+    <td>${spark(a.spark)}</td>${dd(a.dd)}${trend(a)}${rsi(a.rsi)}${mom(a.mom)}${rev(a.d7, .05)}${rmCell(a)}</tr>`).join("");
+  return `<table class="data sortable" data-t="etf"><thead><tr>${th("ETF / Index", 0)}${th("Kurs", 1)}${th("1 Tag", 2)}${th("7 Tage", 3)}${th("30 Tage", 4)}
+    ${th("1 Jahr")}${th("vom Hoch", 6)}${th("Trend ", 7, EV.s)}${th("RSI ", 8, EV.w)}${th("Momentum", 9, Z, 'class="z"')}${th("Umkehr 1W", 10, Z, 'class="z"')}<th></th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+
+// ---------- Marktstimmung & Bitcoin-Zyklus
+function fngCard(title, d, note) {
+  if (!d) return `<div class="card"><h3>${title}</h3><p class="muted">Gerade nicht abrufbar.</p></div>`;
+  const c = d.now <= 25 ? "good" : d.now >= 75 ? "bad" : "mid";
+  const label = d.label.charAt(0).toUpperCase() + d.label.slice(1);
+  return `<div class="card"><h3>${title}</h3>
+    <div class="big"><span class="pill ${c} lg">${d.now}</span><span class="lbl">${esc(label)}</span></div>
+    <div class="gauge"><span style="left:${d.now}%"></span></div><div class="gscale"><span>Extreme Angst</span><span>Extreme Gier</span></div>
+    <div class="mini"><span>Gestern <b>${d.d1}</b></span><span>Vor 1 Woche <b>${d.w1}</b></span><span>Vor 1 Monat <b>${d.m1}</b></span>${d.y1 != null ? `<span>Vor 1 Jahr <b>${d.y1}</b></span>` : ""}</div>
+    ${d.hist ? spark(d.hist, 260, 40, "spark wide") : ""}<p class="note">${note}</p></div>`;
+}
+function capeCard(c) {
+  if (!c) return `<div class="card z"><h3>Shiller-KGV (S&amp;P 500) <span class="tag">Zusatzinfo</span></h3><p class="muted">Gerade nicht abrufbar.</p></div>`;
+  const cl = c.pct > .85 ? "bad" : c.pct < .3 ? "good" : "mid";
+  return `<div class="card z"><h3>Shiller-KGV (S&amp;P 500) <span class="tag">Zusatzinfo</span></h3>
+    <div class="big"><span class="pill ${cl} lg">${num(c.now)}</span><span class="lbl">höher als ${Math.round(c.pct * 100)} % aller Monate seit 1871</span></div>
+    <p class="note">Langjähriger Median: ${num(c.median)}. Ein hoher Wert sagt eher niedrigere Renditen für die <b>nächsten 10 Jahre</b> voraus – für kurzfristiges Timing taugt er nicht.</p></div>`;
+}
+function mvrvChart(hist, w = 300, h = 90) {
+  const vals = hist.map(x => x[1]), lo = 0, hi = Math.max(4.5, ...vals), y = v => h - (v - lo) / (hi - lo) * h;
+  const pts = vals.map((v, i) => `${(i * w / (vals.length - 1)).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  let ticks = "";
+  [2013, 2017, 2021, 2025].forEach(yr => {
+    const i = hist.findIndex(x => x[0] >= `${yr}-01-01`);
+    if (i >= 0) ticks += `<text x="${(i * w / (vals.length - 1)).toFixed(0)}" y="${h + 12}" class="ax">${yr}</text>`;
+  });
+  return `<svg class="mvrv" viewBox="0 -4 ${w} ${h + 18}"><rect x="0" y="${y(hi)}" width="${w}" height="${y(3) - y(hi)}" class="zone-bad"/>
+    <rect x="0" y="${y(1)}" width="${w}" height="${h - y(1)}" class="zone-good"/><polyline points="${pts}" fill="none" stroke="var(--fg)" stroke-width="1.2"/>
+    <text x="2" y="${y(3) - 3}" class="ax">3</text><text x="2" y="${y(1) - 3}" class="ax">1</text>${ticks}</svg>`;
+}
+function btcSection(b) {
+  if (!b) return `<p class="muted">On-Chain-Daten gerade nicht abrufbar.</p>`;
+  const mc = b.mvrv < 1 ? "good" : b.mvrv > 3 ? "bad" : "mid";
+  const mt = b.mvrv < 1 ? "historisch selten so niedrig" : b.mvrv > 3 ? "historisch überhitzt" : b.mvrv > 2.4 ? "erhöht" : "neutraler Bereich";
+  const yc = b.mayer < .8 ? "good" : b.mayer > 2.4 ? "bad" : "mid";
+  const rows = b.cycles.map(c => `<tr class="${c.current ? "cur" : ""}"><td>${c.year}${c.current ? " (jetzt)" : ""}</td>
+    <td class="num">${money(c.start, "USD")}</td><td class="num ${c.same > 0 ? "up" : "down"}">${pct(c.same, 0)}</td>
+    <td>${c.current ? "bisher " : "nach "}${c.peak_days} Tagen, ×${num(c.peak_x)}</td><td class="num down">${c.current ? "bisher " : ""}${pct(c.bottom, 0)}</td></tr>`).join("");
+  return `<div class="grid3">
+    <div class="card"><h3>MVRV <span class="ev ev-m">Belege: mittel</span></h3>
+      <div class="big"><span class="pill ${mc} lg">${num(b.mvrv, 2)}</span><span class="lbl">${mt}</span></div>
+      <p class="note">Marktwert ÷ durchschnittlicher Einkaufspreis aller Coins. Unter 1 = Durchschnitt im Minus (war oft nahe Tiefpunkten),
+      über 3 = viele sitzen auf großen Gewinnen (war oft nahe Hochs). Heute höher als an ${Math.round(b.mvrv_pct * 100)} % aller Tage seit 2010.</p>
+      ${mvrvChart(b.mvrv_hist)}</div>
+    <div class="card"><h3>Mayer-Multiple</h3>
+      <div class="big"><span class="pill ${yc} lg">${num(b.mayer, 2)}</span><span class="lbl">Kurs ÷ 200-Tage-Schnitt</span></div>
+      <p class="note">Unter 0,8 war Bitcoin historisch günstig, über 2,4 überhitzt.</p></div>
+    <div class="card"><h3>Halving-Uhr</h3>
+      <div class="big"><span class="pill mid lg">${b.days}</span><span class="lbl">Tage seit dem Halving ${b.last_halving.slice(0, 4)}</span></div>
+      <p class="note">Nächstes Halving: ${esc(b.next_halving)}. In früheren Zyklen lag das Hoch 12–18 Monate nach dem Halving, danach folgten −75 % bis −85 %.</p></div>
+  </div>
+  <div class="card" style="margin-top:12px"><h3>Frühere Zyklen im Vergleich <span class="ev ev-w">Belege: schwach – nur 4 Zyklen</span></h3>
+    <div class="scroll"><table class="data"><thead><tr><th>Halving</th><th>Kurs am Halving</th><th>Veränderung nach ${b.days} Tagen</th><th>Zyklus-Hoch</th><th>Absturz danach</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>
+    <p class="note">Vier Datenpunkte sind statistisch sehr wenig. Ob sich das Muster wiederholt, weiß niemand.</p></div>`;
+}
+
+const EXPLAIN = `<section><h2>Was bedeuten die Werte?</h2><div class="card explain"><dl>
+<dt>vom Hoch</dt><dd>Wie weit der Kurs unter seinem bisherigen Allzeithoch liegt.</dd>
+<dt>Trend</dt><dd>Aufwärts = Kurs über dem 200-Tage-Schnitt und 50-Tage- über 200-Tage-Schnitt. Am besten belegter Filter, schützt vor allem vor großen Abstürzen.</dd>
+<dt>RSI (14 Tage)</dt><dd>Unter 30 = in kurzer Zeit stark gefallen („überverkauft“), über 70 = stark gestiegen. Bei Krypto bleiben starke Werte oft lange „überkauft“.</dd>
+<dt>KGV / KGV erw.</dt><dd>Kurs ÷ Gewinn der letzten 12 Monate bzw. erwarteter Gewinn. Niedriger = günstiger. Wachstumsfirmen sind fast immer „teuer“.</dd>
+<dt>KBV</dt><dd>Kurs ÷ Buchwert (Eigenkapital). Bei Tech-Firmen meist hoch, weil ihr Wert in Software/Marken steckt.</dd>
+<dt>EK-Rendite, Marge, Schulden/EK</dt><dd>Wie profitabel und wie solide finanziert die Firma ist. Hohe Rendite + hohe Marge + wenig Schulden = hohe Qualität.</dd>
+<dt>Momentum (Zusatz)</dt><dd>Kursveränderung von vor 12 Monaten bis vor 1 Monat. Werte mit starkem Momentum steigen statistisch oft weiter.</dd>
+<dt>Umkehr 1W (Zusatz)</dt><dd>Veränderung der letzten 7 Tage. Sehr starke Wochenverlierer erholen sich manchmal kurzfristig – nach Gebühren meist zu klein, um davon zu leben.</dd>
+</dl><p class="note">Kurse kommen von Yahoo Finance mit wenigen Minuten Verzögerung. Aktien- und ETF-Kurse bewegen sich nur zu Börsenzeiten, Krypto rund um die Uhr.
+Fear &amp; Greed, Shiller-KGV und Bitcoin-On-Chain-Daten ändern sich nur einmal täglich. Keine Anlageberatung.</p></div></section>`;
+
+// ---------- Rendern
+function section(title, items, table, emptyText) {
+  return `<section><h2>${title}<span class="count">${items.length}</span></h2><div class="card">
+    ${items.length ? `<div class="scroll">${table(items)}</div>` : `<div class="empty">${emptyText}</div>`}</div></section>`;
+}
+function route() {
+  const h = decodeURIComponent(location.hash.replace(/^#\/?/, ""));
+  const [view, ...rest] = h.split("/");
+  return {view: view || "start", arg: rest.join("/")};
+}
+const ICONS = {
+  crypto: `<svg viewBox="0 0 32 32" class="ico ico-crypto" aria-hidden="true"><circle cx="16" cy="16" r="14" fill="#f7931a"/>
+    <circle cx="16" cy="16" r="11.5" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="1"/>
+    <path fill="#fff" d="M21.6 14.1c.3-2-1.2-3.1-3.3-3.8l.7-2.7-1.6-.4-.7 2.6-1.3-.3.7-2.6-1.6-.4-.7 2.7-1-.3-2.2-.5-.4 1.7s1.2.3 1.2.3c.7.2.8.6.8 1l-.8 3.1.2.1-.2-.1-1.1 4.4c-.1.2-.3.5-.8.4 0 0-1.2-.3-1.2-.3l-.8 1.8 2.1.5 1.1.3-.7 2.8 1.6.4.7-2.7 1.3.3-.7 2.7 1.6.4.7-2.8c2.8.5 4.9.3 5.8-2.2.7-2-.03-3.2-1.5-3.9 1.1-.3 1.9-1 2.1-2.5zm-3.7 5.2c-.5 2-3.9.9-5 .6l.9-3.5c1.1.3 4.6.8 4.1 2.9zm.5-5.2c-.5 1.8-3.3.9-4.2.7l.8-3.2c.9.2 3.8.6 3.4 2.5z"/></svg>`,
+  stock: `<svg viewBox="0 0 32 32" class="ico ico-stock" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="#16a34a"/>
+    <g stroke="#fff" stroke-width="1.4" stroke-linecap="round"><line x1="9" y1="13" x2="9" y2="25"/><line x1="16" y1="10" x2="16" y2="22"/><line x1="23" y1="6" x2="23" y2="17"/></g>
+    <rect x="7" y="16" width="4" height="6" rx="1" fill="#fff"/><rect x="14" y="13" width="4" height="6" rx="1" fill="#fff" fill-opacity=".55"/><rect x="21" y="8" width="4" height="6" rx="1" fill="#fff"/>
+    <path d="M5 26 L12 20 L17 22 L27 11" fill="none" stroke="#bbf7d0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="0"/>
+    <path d="M23.5 10.5 L27 11 L26.8 14.5" fill="none" stroke="#bbf7d0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  etf: `<svg viewBox="0 0 32 32" class="ico ico-etf" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="#2563eb"/>
+    <circle cx="16" cy="16" r="9" fill="#bfdbfe"/><path d="M16 16 L16 7 A9 9 0 0 1 24.6 18.8 Z" fill="#fff"/>
+    <path d="M16 16 L24.6 18.8 A9 9 0 0 1 11 23.5 Z" fill="#93c5fd"/><circle cx="16" cy="16" r="3.2" fill="#2563eb"/></svg>`,
+  lab: `<svg viewBox="0 0 32 32" class="ico" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="#7c3aed"/>
+    <path d="M13 7h6M14 7v6l-5.5 9.5A2 2 0 0 0 10.2 25.5h11.6a2 2 0 0 0 1.7-3L18 13V7" fill="none" stroke="#fff" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
+    <path d="M11 20h10l1.6 2.8a1 1 0 0 1-.9 1.5H10.3a1 1 0 0 1-.9-1.5z" fill="#ddd6fe"/></svg>`,
+  info: `<svg viewBox="0 0 32 32" class="ico" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="#64748b"/>
+    <circle cx="16" cy="10" r="2" fill="#fff"/><rect x="14.4" y="14" width="3.2" height="10" rx="1.6" fill="#fff"/></svg>`
+};
+const GROUPS = {krypto: ["crypto", "Krypto", ICONS.crypto], aktien: ["stock", "Aktien", ICONS.stock], etfs: ["etf", "ETFs & Indizes", ICONS.etf]};
+const fngCrypto = m => fngCard('Krypto Fear &amp; Greed <span class="ev ev-w">Belege: schwach–mittel</span>', m.crypto_fng,
+  "Extreme Angst (unter 25) lag historisch öfter in der Nähe von Tiefpunkten, extreme Gier (über 75) öfter in der Nähe von Hochs. Verlauf: letzte 12 Monate.");
+const fngStock = m => fngCard('Aktien Fear &amp; Greed (CNN) <span class="ev ev-w">Belege: schwach</span>', m.stock_fng,
+  "Misst die Stimmung am US-Aktienmarkt aus 7 Teilwerten (Volatilität, Momentum, Optionen u. a.).");
+
+document.querySelectorAll("#tabs a[data-ic]").forEach(a => a.insertAdjacentHTML("afterbegin", ICONS[a.dataset.ic]));
+function alertChips(list) {
+  return list.length ? `<div class="chips">${list.map(c => `<span class="chip ${c.kind}" ${c.symbol ? `data-go="#/wert/${encodeURIComponent(c.symbol)}"` : ""}><b>${esc(c.name)}</b>${esc(c.text)}</span>`).join("")}</div>`
+    : `<span class="muted">Gerade nichts Auffälliges.</span>`;
+}
+function tile(key, items) {
+  const [grp, title, icon] = GROUPS[key];
+  const ok = items.filter(a => !a.error);
+  const avg = ok.length ? ok.reduce((x, a) => x + (a.d1 || 0), 0) / ok.length : null;
+  const upT = ok.filter(a => a.trend === "auf").length, os = ok.filter(a => a.rsi != null && a.rsi < 30).length;
+  const best = [...ok].sort((a, b) => (b.d1 ?? -9) - (a.d1 ?? -9))[0];
+  const alertsN = (DATA.alerts?.current || []).filter(c => ok.some(a => a.symbol === c.symbol)).length;
+  return `<a class="tile" href="#/${key}"><div class="ic">${icon}</div><h3>${esc(title)}</h3>
+    <div class="kv"><span class="muted">Werte</span><b>${items.length}</b></div>
+    <div class="kv"><span class="muted">Ø heute</span><b class="${avg > 0 ? "up" : "down"}">${pct(avg)}</b></div>
+    <div class="kv"><span class="muted">im Aufwärtstrend</span><b>${upT} von ${ok.length}</b></div>
+    <div class="kv"><span class="muted">überverkauft (RSI &lt; 30)</span><b>${os}</b></div>
+    <div class="kv"><span class="muted">Auffälligkeiten</span><b>${alertsN}</b></div>
+    ${best ? `<div class="kv"><span class="muted">Bester heute</span><b>${esc(best.name)} ${pct(best.d1)}</b></div>` : ""}
+    <div class="go">Öffnen →</div></a>`;
+}
+function moversList(list) {
+  return list.map(a => `<a class="mv" href="#/wert/${encodeURIComponent(a.symbol)}"><span><b>${esc(a.name)}</b> <span class="sub">${esc(a.symbol.replace(/-USD$/, ""))}</span></span>
+    <span class="num ${a.d1 > 0 ? "up" : "down"}">${pct(a.d1)}</span></a>`).join("") || `<span class="muted">–</span>`;
+}
+
+function render() {
+  const items = DATA.items, m = DATA.market, r = route();
+  const g = k => items.filter(a => a.group === k);
+  document.querySelectorAll("#tabs a").forEach(a => a.classList.toggle("on",
+    a.dataset.r === r.view || (r.view === "wert" && ASSET && GROUPS[a.dataset.r]?.[0] === ASSET.group)));
+  const show = (id, on) => document.getElementById(id).style.display = on ? "" : "none";
+  show("alerts", r.view === "start"); show("btSec", r.view === "vergleich");
+  show("newsSec", r.view === "wert"); show("explain", r.view !== "vergleich" && r.view !== "start");
+  const app = document.getElementById("app");
+  if (r.view !== "start") document.getElementById("top").innerHTML = "";
+
+  if (r.view === "start") {
+    renderAlerts();
+    const ok = items.filter(a => !a.error && a.d1 != null).sort((a, b) => b.d1 - a.d1);
+    document.getElementById("top").innerHTML = `<section><h2>Investitionswelten</h2><div class="tiles">${Object.keys(GROUPS).map(k => tile(k, g(GROUPS[k][0]))).join("")}</div></section>`;
+    app.innerHTML = `<section><h2>Größte Bewegungen heute</h2><div class="card movers">
+        <div><h3>Gewinner</h3>${moversList(ok.filter(a => a.d1 > 0).slice(0, 5))}</div>
+        <div><h3>Verlierer</h3>${moversList(ok.filter(a => a.d1 < 0).reverse().slice(0, 5))}</div></div></section>
+      <section><h2>Marktstimmung</h2><div class="grid3">${fngCrypto(m)}${fngStock(m)}${capeCard(m.cape)}</div></section>`;
+  } else if (GROUPS[r.view]) {
+    const [grp, title] = GROUPS[r.view], list = g(grp);
+    const al = (DATA.alerts?.current || []).filter(c => list.some(a => a.symbol === c.symbol) || (grp === "crypto" && c.key.startsWith("crypto_fng")) || (grp !== "crypto" && c.key.startsWith("stock_fng")));
+    const table = {crypto: cryptoTable, stock: stockTable, etf: etfTable}[grp];
+    const empty = {crypto: "Noch keine Coins", stock: "Noch keine Aktien", etf: "Noch keine ETFs"}[grp] + " – oben suchen und hinzufügen.";
+    app.innerHTML = `<section><h2>Auffällig in ${esc(title)}</h2><div class="card">${alertChips(al)}</div></section>
+      ${grp === "crypto" ? `<section><h2>Stimmung</h2><div class="grid3">${fngCrypto(m)}</div></section>` : ""}
+      ${grp === "stock" ? `<section><h2>Stimmung &amp; Bewertung</h2><div class="grid3">${fngStock(m)}${capeCard(m.cape)}</div></section>` : ""}
+      ${section(title + ` <span class="sub muted" style="font-weight:400">· Namen anklicken für die Einzelanalyse</span>`, list, table, empty)}
+      ${grp === "crypto" ? `<section><h2>Bitcoin-Zyklus</h2>${btcSection(m.btc)}</section>` : ""}`;
+  } else if (r.view === "vergleich") {
+    app.innerHTML = "";
+    renderBtSelect(r.arg);
+  } else if (r.view === "wert") {
+    renderDetail(r.arg);
+  } else if (r.view === "info") {
+    app.innerHTML = SOURCES;
+  }
+  document.getElementById("explain").innerHTML = EXPLAIN;
+
+  // Sortierung wiederherstellen + Klick-Handler
+  document.querySelectorAll("table.sortable").forEach(t => {
+    const st = sortState[t.dataset.t];
+    if (st) { const h = t.querySelector(`th[data-col="${st.col}"]`); if (h) { h.dataset.dir = st.dir; sortTable(t, st.col, st.dir); } }
+    t.querySelectorAll("th[data-col]").forEach(h => h.addEventListener("click", () => {
+      const dir = h.dataset.dir === "desc" ? "asc" : "desc";
+      t.querySelectorAll("th[data-dir]").forEach(x => delete x.dataset.dir);
+      h.dataset.dir = dir; sortState[t.dataset.t] = {col: +h.dataset.col, dir};
+      sortTable(t, +h.dataset.col, dir);
+    }));
+  });
+  document.querySelectorAll("td[data-sym]").forEach(td => {
+    const sy = td.dataset.sym, v = parseFloat(td.dataset.v), old = prevPrices[sy];
+    if (old != null && v !== old) td.classList.add(v > old ? "flash-up" : "flash-down");
+    prevPrices[sy] = v;
+  });
+}
+window.addEventListener("hashchange", () => { if (route().view !== "wert") ASSET = null; if (DATA) render(); window.scrollTo(0, 0); });
+
+function sortTable(t, col, dir) {
+  const val = r => { const c = r.cells[col]; if (!c) return -1e12; const v = c.dataset.v;
+    if (v === undefined) return -1e12; const n = parseFloat(v); return isNaN(n) ? v : n; };
+  const rows = [...t.tBodies[0].rows];
+  rows.sort((a, b) => { const x = val(a), y = val(b); const r = x > y ? 1 : x < y ? -1 : 0; return dir === "asc" ? r : -r; });
+  rows.forEach(r => t.tBodies[0].appendChild(r));
+}
+
+// ---------- Auffälligkeiten
+function renderAlerts() {
+  const al = DATA.alerts; if (!al) return;
+  const chips = al.current.length ? al.current.map(c => `<span class="chip ${c.kind}" ${c.symbol ? `data-go="#/wert/${encodeURIComponent(c.symbol)}" title="Einzelanalyse öffnen"` : ""}><b>${esc(c.name)}</b>${esc(c.text)}</span>`).join("")
+    : `<span class="muted">Gerade nichts Auffälliges.</span>`;
+  const log = al.log.length ? `<ul class="log">${al.log.map(e => `<li><span class="t">${esc(e.time)}</span><span><b>${esc(e.name)}</b> <span class="k-${e.kind}">${esc(e.text)}</span></span></li>`).join("")}</ul>`
+    : `<p class="muted" style="font-size:12px">Noch keine. Sobald etwas <b>neu</b> auffällig wird (z. B. RSI fällt unter 30, Trendwechsel, starke Tagesbewegung), erscheint es hier und als Mac-Benachrichtigung.</p>`;
+  document.getElementById("alerts").innerHTML = `<section><h2>Auffälligkeiten</h2><div class="card"><div class="alerts">
+    <div><h3>Gerade auffällig <span class="sub muted">· ${al.current.length}</span></h3><div class="chips">${chips}</div></div>
+    <div><h3>Letzte Benachrichtigungen</h3>${log}</div></div>
+    ${STATIC ? `<div class="ctrl"><span>☁️ Läuft in der Cloud: prüft etwa alle 15 Minuten, auch wenn dein Mac aus ist. Neue Auffälligkeiten kommen per ntfy aufs Handy.</span></div>` : `<div class="ctrl"><label><input type="checkbox" id="macn" ${al.settings.mac_notifications ? "checked" : ""}> Mac-Benachrichtigungen</label>
+      <button id="testn">Test-Benachrichtigung</button>
+      <label><input type="checkbox" id="nfn" ${al.settings.ntfy_notifications ? "checked" : ""} ${NFS.topic ? "" : "disabled"}> Handy (ntfy)</label>
+      <span class="tgstate ${NFS.topic ? "on" : ""}">${NFS.topic ? "eingerichtet ✓" : "nicht eingerichtet"}</span>
+      <button id="nfSetup">${NFS.topic ? "Handy-Einstellungen" : "📱 Handy einrichten"}</button>
+      ${IS_PHONE ? "" : `<button id="phOpen">📲 Auf dem Handy öffnen</button>`}
+      ${TGS.has_chat ? `<label><input type="checkbox" id="tgn" ${al.settings.telegram_notifications ? "checked" : ""}> Telegram</label>` : ""}<span>Prüft alle 5 Minuten im Hintergrund, solange der Radar läuft – auch wenn dieses Fenster zu ist.</span></div>`}
+  </div></section>`;
+  if (STATIC) return;
+  document.getElementById("macn").onchange = async e => {
+    await fetch("/api/settings", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({mac_notifications: e.target.checked})});
+    DATA.alerts.settings.mac_notifications = e.target.checked;
+    toast(e.target.checked ? "Benachrichtigungen an" : "Benachrichtigungen aus");
+  };
+  document.getElementById("nfSetup").onclick = openNf;
+  const po = document.getElementById("phOpen"); if (po) po.onclick = openPhone;
+  document.getElementById("nfn").onchange = async e => {
+    await fetch("/api/settings", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({ntfy_notifications: e.target.checked})});
+    DATA.alerts.settings.ntfy_notifications = e.target.checked;
+    toast(e.target.checked ? "Handy-Benachrichtigungen an" : "Handy-Benachrichtigungen aus");
+  };
+  const tgn = document.getElementById("tgn"); if (tgn) tgn.onchange = async e => {
+    await fetch("/api/settings", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({telegram_notifications: e.target.checked})});
+    DATA.alerts.settings.telegram_notifications = e.target.checked;
+    toast(e.target.checked ? "Handy-Benachrichtigungen an" : "Handy-Benachrichtigungen aus");
+  };
+  document.getElementById("testn").onclick = async () => { await fetch("/api/test-notification", {method: "POST"}); toast("Test gesendet – schau oben rechts auf deinem Bildschirm"); };
+}
+
+// ---------- Radar auf dem Handy
+const IS_PHONE = !["127.0.0.1", "localhost", "[::1]"].includes(location.hostname);
+function phPaint(j) {
+  document.getElementById("phUrl").textContent = j.url || "Kein WLAN gefunden – ist der Mac mit einem Netzwerk verbunden?";
+  const q = document.getElementById("phQr"); q.style.display = j.url ? "" : "none";
+  if (j.url) q.src = "/api/phone/qr.svg?u=" + encodeURIComponent(j.url);
+}
+async function openPhone() {
+  document.getElementById("phMsg").textContent = "";
+  phPaint(await (await fetch("/api/phone")).json());
+  document.getElementById("phDlg").showModal();
+}
+document.getElementById("phClose").onclick = () => document.getElementById("phDlg").close();
+document.getElementById("phNew").onclick = async () => {
+  phPaint(await (await fetch("/api/phone/renew", {method: "POST"})).json());
+  msg("phMsg", "Neuer Schlüssel erzeugt – Code auf dem Handy neu scannen.", true);
+};
+
+// ---------- ntfy-Einrichtung
+let NFS = {topic: null};
+async function nfStatus() { try { NFS = await (await fetch("/api/ntfy/status")).json(); } catch {} if (DATA && route().view === "start") renderAlerts(); }
+function nfPaint() {
+  document.getElementById("nfTopic").textContent = NFS.topic || "…";
+  if (NFS.topic) document.getElementById("nfQr").src = "/api/ntfy/qr.svg?t=" + encodeURIComponent(NFS.topic);
+}
+async function openNf() {
+  if (!NFS.topic) { NFS = await (await fetch("/api/ntfy/setup", {method: "POST"})).json(); if (DATA && route().view === "start") renderAlerts(); }
+  nfPaint(); document.getElementById("nfDlg").showModal();
+}
+document.getElementById("nfCopy").onclick = async () => {
+  try { await navigator.clipboard.writeText(NFS.topic); msg("nfMsg", "Kanalname kopiert.", true); } catch { msg("nfMsg", "Kopieren ging nicht – bitte abtippen."); }
+};
+document.getElementById("nfTest").onclick = async () => {
+  msg("nfMsg", "Sende …", true);
+  const r = await fetch("/api/ntfy/test", {method: "POST"}), j = await r.json();
+  msg("nfMsg", r.ok ? "Gesendet ✓ – schau aufs Handy. Nichts angekommen? Prüfe, ob der Kanalname in der App exakt stimmt." : j.error, r.ok);
+};
+document.getElementById("nfNew").onclick = async () => {
+  if (!confirm("Neuen Kanalnamen erzeugen? Den alten musst du dann in der App löschen und den neuen abonnieren.")) return;
+  NFS = await (await fetch("/api/ntfy/new", {method: "POST"})).json(); nfPaint(); msg("nfMsg", "Neuer Kanalname erzeugt – in der App neu abonnieren.", true);
+};
+document.getElementById("nfToTg").onclick = () => { document.getElementById("nfDlg").close(); openTg(); };
+document.getElementById("nfClose").onclick = () => { document.getElementById("nfDlg").close(); nfStatus(); };
+if (!STATIC) nfStatus();
+
+// ---------- Telegram-Einrichtung
+let TGS = {has_token: false, has_chat: false, bot: null};
+async function tgStatus() { try { TGS = await (await fetch("/api/telegram/status")).json(); } catch {} if (DATA) renderAlerts(); tgPaint(); }
+function tgPaint() {
+  document.getElementById("st1").classList.toggle("done", !!TGS.token_ok);
+  document.getElementById("st2").classList.toggle("done", !!TGS.has_chat);
+  document.getElementById("st3").classList.toggle("done", !!TGS.has_chat);
+  document.getElementById("tgLink").innerHTML = TGS.bot ? `<a href="https://t.me/${esc(TGS.bot)}" target="_blank" rel="noopener"><b>@${esc(TGS.bot)}</b></a>` : "(erscheint nach Schritt 1)";
+  if (TGS.token_ok) document.getElementById("tgToken").placeholder = "Token gespeichert ✓ (nur zum Ändern neu einfügen)";
+}
+function openTg() { tgPaint(); document.getElementById("tgDlg").showModal(); }
+const msg = (id, t, ok) => { const el = document.getElementById(id); el.textContent = t; el.className = "msg " + (ok ? "ok" : "err"); };
+async function tgPost(url, body) {
+  const r = await fetch(url, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body || {})});
+  return [r.ok, await r.json()];
+}
+document.getElementById("tgSave").onclick = async () => {
+  const t = document.getElementById("tgToken").value.trim(); if (!t) return msg("m1", "Bitte zuerst den Token einfügen.");
+  const [ok, j] = await tgPost("/api/telegram/token", {token: t});
+  if (!ok) return msg("m1", j.error);
+  document.getElementById("tgToken").value = ""; msg("m1", `Gespeichert – dein Bot heißt @${j.bot}.`, true); await tgStatus();
+};
+document.getElementById("tgConnect").onclick = async () => {
+  msg("m3", "Suche deine Nachricht an den Bot …", true);
+  const [ok, j] = await tgPost("/api/telegram/connect");
+  if (!ok) return msg("m3", j.error);
+  msg("m3", `Verbunden mit ${j.name} – schau aufs Handy!`, true); await tgStatus();
+};
+document.getElementById("tgTest").onclick = async () => {
+  const [ok, j] = await tgPost("/api/telegram/test");
+  msg("m3", ok ? "Test gesendet ✓" : (j.error + " – erst Schritt 1–3 erledigen."), ok);
+};
+document.getElementById("tgClose").onclick = () => document.getElementById("tgDlg").close();
+if (!STATIC) tgStatus();
+
+// ---------- News
+let newsSym = null, newsLang = "de";
+function renderNewsBar() {
+  if (!newsSym) return;
+  document.getElementById("newsbar").innerHTML = `<span class="lang">
+    <span class="nchip ${newsLang === "de" ? "on" : ""}" data-lang="de">Deutsch</span><span class="nchip ${newsLang === "en" ? "on" : ""}" data-lang="en">Englisch</span></span>`;
+  if (!document.getElementById("newslist").dataset.loaded) loadNews();
+}
+function ago(ts) {
+  const m = Math.round((Date.now() / 1000 - ts) / 60);
+  return m < 60 ? `vor ${m} Min.` : m < 1440 ? `vor ${Math.round(m / 60)} Std.` : `vor ${Math.round(m / 1440)} Tg.`;
+}
+async function loadNews() {
+  const el = document.getElementById("newslist"); if (!newsSym) return;
+  el.dataset.loaded = "1"; el.innerHTML = `<span class="muted">Lade News …</span>`;
+  const sym = newsSym, lang = newsLang;
+  const r = await fetch(apiUrl(`/api/news?symbol=${encodeURIComponent(sym)}&lang=${lang}`)); const j = await r.json();
+  if (sym !== newsSym || lang !== newsLang) return;
+  if (j.error) { el.innerHTML = `<span class="muted">${esc(j.error)}</span>`; return; }
+  el.innerHTML = j.items.length ? `<ul class="news">${j.items.map(n => `<li><a href="${esc(n.url)}" target="_blank" rel="noopener">${esc(n.title)}</a>
+    <div class="meta">${esc(n.source)}${n.ts ? " · " + ago(n.ts) : ""}</div></li>`).join("")}</ul>` : `<span class="muted">Keine aktuellen Meldungen gefunden.</span>`;
+}
+function showNews(sym, scroll = true) {
+  if (!sym) return; newsSym = sym; renderNewsBar(); loadNews();
+  if (scroll) document.getElementById("newsSec").scrollIntoView({behavior: "smooth"});
+}
+document.addEventListener("click", e => {
+  const g = e.target.closest("[data-go]"); if (g) { location.hash = g.dataset.go; return; }
+  const l = e.target.closest("[data-lang]"); if (l) { newsLang = l.dataset.lang; renderNewsBar(); loadNews(); }
+});
+
+// ---------- Strategie-Vergleich
+let BT = null, btMode = "lump", btSel = null;
+let btAuto = null;
+function renderBtSelect(pre) {
+  const sel = document.getElementById("btSym"), cur = pre || sel.value || "BTC-USD";
+  sel.innerHTML = DATA.items.map(a => `<option value="${esc(a.symbol)}" ${a.symbol === cur ? "selected" : ""}>${esc(a.name)}</option>`).join("");
+  if (pre && btAuto !== pre && DATA.items.some(a => a.symbol === pre)) { btAuto = pre; runBacktest(); }
+}
+document.getElementById("btRun").onclick = runBacktest;
+document.querySelectorAll(".seg [data-mode]").forEach(b => b.onclick = () => {
+  btMode = b.dataset.mode; document.querySelectorAll(".seg [data-mode]").forEach(x => x.classList.toggle("on", x === b));
+  btSel = null; if (BT) renderBt();
+});
+async function runBacktest() {
+  const sym = document.getElementById("btSym").value, out = document.getElementById("btOut");
+  out.innerHTML = `<span class="muted">Rechne … (einige Sekunden)</span>`;
+  const r = await fetch(apiUrl("/api/backtest?symbol=" + encodeURIComponent(sym))); const j = await r.json();
+  if (j.error) { out.innerHTML = `<span class="muted">${esc(j.error)}</span>`; return; }
+  BT = j; btSel = null; renderBt();
+}
+function verdict(rows, base, mode) {
+  const key = mode === "lump" ? "final" : "final";
+  const better = rows.filter(x => x !== base && x[key] > base[key] * 1.02);
+  const safer = mode === "lump" ? rows.filter(x => x !== base && x.maxdd > base.maxdd + 0.1 && x.final > base.final * 0.6) : [];
+  const best = rows[0];
+  let t = `<b>Ergebnis ${esc(BT.name)} (${BT.start.slice(0, 4)}–${BT.end.slice(0, 4)}):</b> `;
+  if (!better.length) t += `Keine Strategie hat ${esc(base.name)} geschlagen. `;
+  else t += `Besser als ${esc(base.name)} waren: ${better.map(x => `<b>${esc(x.name)}</b>`).join(", ")}. `;
+  if (best !== base && better.length) t += `Am besten: ${esc(best.name)} mit ${money(best.final, BT.currency)} statt ${money(base.final, BT.currency)}. `;
+  if (safer.length) t += `Deutlich kleinere Abstürze bei noch ordentlicher Rendite: ${safer.map(x => `${esc(x.name)} (${pct(x.maxdd, 0)} statt ${pct(base.maxdd, 0)})`).join(", ")}. `;
+  const few = better.filter(x => x.trades != null && x.trades <= 5);
+  if (few.length) t += `<br><span class="muted">Vorsicht: ${few.map(x => esc(x.name)).join(", ")} beruht auf nur ${few.map(x => x.trades).join("/")} Trades – das kann Glück gewesen sein.</span>`;
+  return t;
+}
+function renderBt() {
+  const rows = [...(btMode === "lump" ? BT.lump : BT.saving)].sort((a, b) => b.final - a.final);
+  const base = rows.find(x => x.key === (btMode === "lump" ? "hold" : "sparplan"));
+  if (!btSel) btSel = (rows.find(x => x !== base) || base).key;
+  const cur = BT.currency;
+  const head = btMode === "lump"
+    ? `<tr><th>Strategie</th><th>Endwert</th><th>pro Jahr</th><th>größter Absturz</th><th>Trades</th><th>Zeit investiert</th><th>Trefferquote</th></tr>`
+    : `<tr><th>Strategie</th><th>Eingezahlt</th><th>Endwert</th><th>pro Jahr</th><th>× Einzahlung</th><th>Ø Cash-Anteil</th></tr>`;
+  const body = rows.map(x => {
+    const beat = x !== base && x.final > base.final * 1.02 ? `<span class="beat">besser</span>` : "";
+    const name = `<td><b>${esc(x.name)}</b>${beat}<div class="sub">${esc(x.desc)}</div></td>`;
+    const cls = `btrow ${x.key === btSel ? "sel" : ""}`;
+    return btMode === "lump"
+      ? `<tr class="${cls}" data-k="${x.key}">${name}<td class="num">${money(x.final, cur)}</td><td class="num ${x.cagr > 0 ? "up" : "down"}">${pct(x.cagr)}</td>
+         <td class="num down">${pct(x.maxdd, 0)}</td><td class="num">${x.trades}</td><td class="num">${pct(x.invested, 0, false)}</td>
+         <td class="num">${x.winrate == null ? "–" : pct(x.winrate, 0, false)}</td></tr>`
+      : `<tr class="${cls}" data-k="${x.key}">${name}<td class="num">${money(x.paid, cur)}</td><td class="num">${money(x.final, cur)}</td>
+         <td class="num">${x.irr == null ? "–" : pct(x.irr)}</td><td class="num">${num(x.multiple, 2)}×</td><td class="num">${pct(x.cash_avg, 0, false)}</td></tr>`;
+  }).join("");
+  const selRow = rows.find(x => x.key === btSel);
+  document.getElementById("btOut").innerHTML = `<p class="verdict">${verdict(rows, base, btMode)}</p>
+    <div class="lgd"><span><i style="background:var(--s-hold)"></i>${esc(base.name)}</span>
+      ${selRow !== base ? `<span><i style="background:var(--s-sel)"></i>${esc(selRow.name)} (ausgewählt)</span>` : ""}
+      <span><i style="background:var(--s-other)"></i>übrige Strategien</span><span>· Zeile anklicken zum Hervorheben · logarithmische Skala</span></div>
+    <div class="chartwrap viz" id="btChart"></div>
+    <div class="scroll" style="margin-top:14px"><table class="data">${"<thead>" + head + "</thead>"}<tbody>${body}</tbody></table></div>
+    <p class="note">${esc(BT.notes)} „Trefferquote“ = Anteil der abgeschlossenen Trades mit Gewinn. Vergangene Ergebnisse sind keine Garantie –
+    und die getesteten Werte sind die Gewinner von heute, was Rückblicke immer etwas zu gut aussehen lässt.</p>`;
+  document.querySelectorAll("tr.btrow").forEach(tr => tr.onclick = () => { btSel = tr.dataset.k; renderBt(); });
+  drawBtChart(rows, base, selRow);
+}
+function drawBtChart(rows, base, selRow) {
+  const el = document.getElementById("btChart"), W = Math.max(320, el.clientWidth), H = 300, m = {l: 64, r: 110, t: 10, b: 26};
+  const iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const dates = base.curve.map(p => p[0]), n = dates.length;
+  const all = rows.flatMap(r => r.curve.map(p => p[1])).filter(v => v > 0);
+  const lo = Math.log10(Math.min(...all)), hi = Math.log10(Math.max(...all));
+  const x = i => m.l + i / (n - 1) * iw, y = v => m.t + ih - (Math.log10(Math.max(v, 1)) - lo) / (hi - lo || 1) * ih;
+  const path = c => c.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p[1]).toFixed(1)}`).join("");
+  let grid = "";
+  for (let e = Math.floor(lo); e <= Math.ceil(hi); e++) for (const k of [1, 2, 5]) {
+    const v = k * 10 ** e; if (Math.log10(v) < lo || Math.log10(v) > hi) continue;
+    grid += `<line x1="${m.l}" x2="${m.l + iw}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${m.l - 8}" y="${y(v) + 4}" text-anchor="end" class="ax">${money(v, BT.currency)}</text>`;
+  }
+  let years = "", lastY = null;
+  dates.forEach((d, i) => { const yr = d.slice(0, 4); if (yr !== lastY && i > 0 && +yr % (n > 400 ? 2 : 1) === 0) years += `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" class="ax">${yr}</text>`; lastY = yr; });
+  const others = rows.filter(r => r !== base && r !== selRow).map(r => `<path d="${path(r.curve)}" fill="none" stroke="var(--s-other)" stroke-width="1.5"/>`).join("");
+  const labels = () => {
+    const last = r => y(r.curve[r.curve.length - 1][1]);
+    let yb = last(base), ys = selRow !== base ? last(selRow) : null;
+    if (ys != null && Math.abs(yb - ys) < 14) { const mid = (yb + ys) / 2, up = yb < ys ? -1 : 1; yb = mid + up * 7; ys = mid - up * 7; }
+    const t = (r, yy) => `<text x="${m.l + iw + 8}" y="${yy + 4}" class="lbl">${esc(r.name)}</text>`;
+    return t(base, yb) + (ys != null ? t(selRow, ys) : "");
+  };
+  const selPath = selRow !== base ? `<path d="${path(selRow.curve)}" fill="none" stroke="var(--s-sel)" stroke-width="2"/>` : "";
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${grid}${years}${others}
+    <path d="${path(base.curve)}" fill="none" stroke="var(--s-hold)" stroke-width="2"/>${selPath}
+    ${labels()}
+    <line id="cx" y1="${m.t}" y2="${m.t + ih}" stroke="var(--muted)" stroke-dasharray="3 3" style="display:none"/>
+    <rect x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="transparent" id="hit"/></svg><div class="tip" id="btTip"></div>`;
+  const hit = el.querySelector("#hit"), cx = el.querySelector("#cx"), tip = el.querySelector("#btTip"), svg = el.querySelector("svg");
+  hit.onmousemove = ev => {
+    const r = svg.getBoundingClientRect(), px = (ev.clientX - r.left) * W / r.width;
+    const i = Math.max(0, Math.min(n - 1, Math.round((px - m.l) / iw * (n - 1))));
+    cx.setAttribute("x1", x(i)); cx.setAttribute("x2", x(i)); cx.style.display = "";
+    const line = (rr, col) => `<div><span class="sw" style="background:${col}"></span>${esc(rr.name)}: <b>${money(rr.curve[i][1], BT.currency)}</b></div>`;
+    tip.innerHTML = `<div class="muted">${new Date(dates[i]).toLocaleDateString("de-DE")}</div>${line(base, "var(--s-hold)")}${selRow !== base ? line(selRow, "var(--s-sel)") : ""}`;
+    tip.style.display = "block";
+    const left = x(i) * r.width / W; tip.style.left = (left > r.width - 220 ? left - tip.offsetWidth - 12 : left + 12) + "px"; tip.style.top = "10px";
+  };
+  hit.onmouseleave = () => { cx.style.display = "none"; tip.style.display = "none"; };
+}
+window.addEventListener("resize", () => { if (BT) renderBt(); });
+
+// ---------- Einzelanalyse
+let ASSET = null, assetLoading = null, chartRange = "1J";
+const RANGES = {"1M": 31, "6M": 183, "1J": 366, "3J": 1096, "5J": 1827, "Max": 1e6};
+function big(v, cur) {
+  if (v == null) return "–";
+  const a = Math.abs(v), [d, u] = a >= 1e12 ? [1e12, " Bio."] : a >= 1e9 ? [1e9, " Mrd."] : a >= 1e6 ? [1e6, " Mio."] : [1, ""];
+  return num(v / d, d === 1 ? 0 : 1) + u + (cur ? " " + cur : "");
+}
+function sigCard(title, value, cls, text, extra = "", zusatz = false) {
+  return `<div class="sig ${zusatz ? "z" : ""}"><div class="t"><span>${title}</span>${extra}</div>
+    <div class="v">${cls ? `<span class="pill ${cls} lg" style="font-size:18px">${value}</span>` : value}</div><p>${text}</p></div>`;
+}
+function detailSignals(a) {
+  const out = [];
+  const tr = {auf: ["Aufwärts", "good", "Kurs über dem 200-Tage-Schnitt und 50er über 200er – Aufwärtstrend intakt."],
+              ab: ["Abwärts", "bad", "Kurs unter dem 200-Tage-Schnitt – Abwärtstrend. Trendfolger wären hier nicht investiert."],
+              gemischt: ["Gemischt", "mid", "Die Durchschnitte widersprechen sich – der Trend kippt gerade oder ist unklar."]}[a.trend];
+  out.push(tr ? sigCard("Trend (200 Tage)", tr[0], tr[1], `${tr[2]} Abstand: ${pct(a.vs200, 0)}.`, EV.s)
+              : sigCard("Trend (200 Tage)", "–", "", "Zu wenig Kurshistorie.", EV.s));
+  if (a.rsi != null) {
+    const [c, t] = a.rsi < 30 ? ["good", "Überverkauft: in kurzer Zeit stark gefallen – oft folgt eine Gegenbewegung, aber nicht immer."]
+      : a.rsi > 70 ? ["bad", "Überkauft: in kurzer Zeit stark gestiegen – Rücksetzer werden wahrscheinlicher."]
+      : ["mid", "Neutral: weder stark überverkauft noch überkauft."];
+    out.push(sigCard("RSI (14 Tage)", Math.round(a.rsi), c, t, EV.w));
+  }
+  out.push(sigCard("Abstand vom Allzeithoch", pct(a.dd, 0), "", `Allzeithoch: ${money(a.ath, a.currency)}.`));
+  const S = ASSET.series, n = S.close.length, from = S.dates.findIndex(d => d >= new Date(Date.now() - 365 * 864e5).toISOString().slice(0, 10));
+  const yr = S.close.slice(Math.max(0, from)).filter(v => v != null), lo = Math.min(...yr), hi = Math.max(...yr), pos = (a.price - lo) / ((hi - lo) || 1);
+  out.push(sigCard("52-Wochen-Spanne", `${Math.round(pos * 100)} %`, "", `Tief ${money(lo, a.currency)} · Hoch ${money(hi, a.currency)}. 0 % = am Jahrestief, 100 % = am Jahreshoch.`));
+  out.push(sigCard("Momentum (12–1 Monate)", pct(a.mom, 0), "", "Kursveränderung von vor 12 bis vor 1 Monat. Stark positiv = Gewinner laufen statistisch oft weiter.", '<span class="tag">Zusatz</span>', true));
+  out.push(sigCard("Letzte 7 Tage", pct(a.d7), "", "Sehr starke Wochenverlierer erholen sich manchmal kurzfristig (Umkehr-Effekt).", '<span class="tag">Zusatz</span>', true));
+  if (a.group === "stock" && ASSET.fund) {
+    const f = ASSET.fund, pe = f.pe, c = pe == null ? "" : pe < 0 ? "bad" : pe <= 15 ? "good" : pe >= 35 ? "bad" : "mid";
+    out.push(sigCard("Value: KGV", pe == null ? "–" : num(pe), c, `Erwartetes KGV ${num(f.fpe)}, KBV ${num(f.pb)}. Niedriger = günstiger; Wachstumsfirmen sind fast immer „teuer“.`, EV.m));
+    const q = [f.roe >= .15, f.margin >= .15, f.de != null && f.de <= .5].filter(Boolean).length;
+    out.push(sigCard("Qualität", `${q} von 3`, q >= 2 ? "good" : q === 1 ? "mid" : "bad",
+      `EK-Rendite ${pct(f.roe, 0, false)}, Marge ${pct(f.margin, 0, false)}, Schulden/EK ${num(f.de, 2)}.`, EV.m));
+  }
+  const p = ASSET.profile || {};
+  if (p.targetMeanPrice && a.group === "stock") {
+    const up = p.targetMeanPrice / a.price - 1;
+    out.push(sigCard("Analysten", p.recommendation || "–", "", `Ø Kursziel ${money(p.targetMeanPrice, a.currency)} (${pct(up, 0)}), Spanne ${money(p.targetLowPrice, a.currency)}–${money(p.targetHighPrice, a.currency)}, ${p.numberOfAnalystOpinions || "?"} Analysten. Analysten liegen oft daneben.`, '<span class="tag">Zusatz</span>', true));
+  }
+  if (a.group === "crypto" && DATA.market.crypto_fng) {
+    const f = DATA.market.crypto_fng, c = f.now <= 25 ? "good" : f.now >= 75 ? "bad" : "mid";
+    out.push(sigCard("Krypto-Stimmung", f.now, c, `Fear &amp; Greed: ${esc(f.label)}. Gilt für den ganzen Kryptomarkt.`, EV.w));
+  }
+  return `<div class="sigs">${out.join("")}</div>`;
+}
+function profileCard(a) {
+  const p = ASSET.profile || {}, cur = a.currency, rows = [];
+  const add = (k, v) => { if (v != null && v !== "" && v !== "–") rows.push(`<div><span>${k}</span><b>${v}</b></div>`); };
+  if (a.group === "stock") {
+    add("Sektor", esc(p.sector)); add("Branche", esc(p.industry)); add("Land", esc(p.country));
+    add("Mitarbeiter", p.fullTimeEmployees ? num(p.fullTimeEmployees, 0) : null); add("Börsenwert", big(p.marketCap, cur));
+    add("Dividendenrendite", p.dividendYield != null ? num(p.dividendYield, 2) + " %" : null);
+    add("Umsatzwachstum", p.revenueGrowth != null ? pct(p.revenueGrowth, 0) : null); add("Gewinnwachstum", p.earningsGrowth != null ? pct(p.earningsGrowth, 0) : null);
+    add("Beta (Schwankung ggü. Markt)", p.beta != null ? num(p.beta, 2) : null);
+  } else if (a.group === "crypto") {
+    add("Marktwert", big(p.marketCap, cur)); add("Im Umlauf", big(p.circulatingSupply)); add("Maximale Menge", p.maxSupply ? big(p.maxSupply) : "unbegrenzt");
+    add("Handelsvolumen 24 h", big(p.volume24Hr, cur));
+  } else {
+    add("Anbieter", esc(p.fundFamily)); add("Kategorie", esc(p.category)); add("Fondsvolumen", big(p.totalAssets, cur));
+    add("Kosten pro Jahr", p.netExpenseRatio != null ? num(p.netExpenseRatio, 2) + " %" : null);
+    add("Dividendenrendite", p.dividendYield != null ? num(p.dividendYield, 2) + " %" : null);
+  }
+  if (p.website) rows.push(`<div><span>Website</span><a href="${esc(p.website)}" target="_blank" rel="noopener" style="color:var(--accent)">${esc(p.website.replace(/^https?:\/\/(www\.)?/, ""))}</a></div>`);
+  const sum = p.summary ? `<div class="summary" id="sumTxt">${esc(p.summary)}</div><button class="linkbtn" onclick="document.getElementById('sumTxt').classList.toggle('open')">mehr / weniger</button>
+    <span class="muted" style="font-size:11px"> · Beschreibung von Yahoo Finance (Englisch)</span>` : "";
+  return `<section><h2>Profil</h2><div class="card">${sum}${rows.length ? `<div class="facts">${rows.join("")}</div>` : ""}</div></section>`;
+}
+function niceTicks(lo, hi, n = 5) {
+  const step0 = (hi - lo) / n || 1, mag = 10 ** Math.floor(Math.log10(step0)), f = step0 / mag;
+  const step = (f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10) * mag, out = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(v);
+  return out;
+}
+function drawPrice() {
+  const el = document.getElementById("pchart"), rel = document.getElementById("rchart"); if (!el || !ASSET) return;
+  const S = ASSET.series, cur = ASSET.currency, days = RANGES[chartRange];
+  const cutoff = new Date(new Date(S.dates[S.dates.length - 1]) - days * 864e5).toISOString().slice(0, 10);
+  let i0 = S.dates.findIndex(d => d >= cutoff); if (i0 < 0) i0 = 0;
+  const step = Math.max(1, Math.ceil((S.dates.length - i0) / 700)), idx = [];
+  for (let i = i0; i < S.dates.length; i += step) idx.push(i);
+  if (idx[idx.length - 1] !== S.dates.length - 1) idx.push(S.dates.length - 1);
+  const W = Math.max(320, el.clientWidth), H = 300, m = {l: 70, r: 12, t: 10, b: 24}, iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const logS = days > 1100;
+  const vals = idx.flatMap(i => [S.close[i], S.sma50[i], S.sma200[i]]).filter(v => v != null && v > 0);
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  const tf = v => logS ? Math.log10(v) : v, L = tf(lo), Hh = tf(hi), pad = (Hh - L) * .04;
+  const x = k => m.l + k / (idx.length - 1) * iw, y = v => m.t + ih - (tf(v) - (L - pad)) / ((Hh + pad) - (L - pad)) * ih;
+  const path = key => { let d = "", pen = false; idx.forEach((i, k) => { const v = S[key][i]; if (v == null) { pen = false; return; } d += `${pen ? "L" : "M"}${x(k).toFixed(1)},${y(v).toFixed(1)}`; pen = true; }); return d; };
+  let grid = "";
+  const ticks = logS ? (() => { const t = []; for (let e = Math.floor(L); e <= Math.ceil(Hh); e++) for (const k of [1, 2, 5]) { const v = k * 10 ** e; if (v >= lo && v <= hi) t.push(v); } return t; })() : niceTicks(lo, hi);
+  ticks.forEach(v => grid += `<line x1="${m.l}" x2="${m.l + iw}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${m.l - 8}" y="${y(v) + 4}" text-anchor="end" class="ax">${money(v, cur)}</text>`);
+  let xl = "", last = null;
+  idx.forEach((i, k) => { const d = S.dates[i], key = days <= 400 ? d.slice(0, 7) : d.slice(0, 4);
+    if (key !== last && k > 0) { const every = days <= 400 ? (days <= 31 ? 1 : 1) : Math.ceil((idx.length > 0 ? (S.dates.length - i0) / 365 : 1) / 8);
+      const lbl = days <= 400 ? new Date(d).toLocaleDateString("de-DE", {month: "short"}) : d.slice(0, 4);
+      if (days <= 400 || (+d.slice(0, 4)) % every === 0) xl += `<text x="${x(k)}" y="${H - 6}" text-anchor="middle" class="ax">${lbl}</text>`; }
+    last = key; });
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${grid}${xl}
+    <path d="${path("sma200")}" fill="none" stroke="var(--c3)" stroke-width="1.5"/><path d="${path("sma50")}" fill="none" stroke="var(--c2)" stroke-width="1.5"/>
+    <path d="${path("close")}" fill="none" stroke="var(--c1)" stroke-width="2"/>
+    <line id="pcx" y1="${m.t}" y2="${m.t + ih}" stroke="var(--muted)" stroke-dasharray="3 3" style="display:none"/>
+    <circle id="pdot" r="4" fill="var(--c1)" stroke="var(--card)" stroke-width="2" style="display:none"/>
+    <rect x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="transparent" id="phit"/></svg><div class="tip" id="ptip"></div>`;
+  // RSI
+  const RH = 110, rm = {t: 6, b: 18}, rih = RH - rm.t - rm.b, ry = v => rm.t + rih - v / 100 * rih;
+  let rp = "", pen = false; idx.forEach((i, k) => { const v = S.rsi[i]; if (v == null) { pen = false; return; } rp += `${pen ? "L" : "M"}${x(k).toFixed(1)},${ry(v).toFixed(1)}`; pen = true; });
+  rel.innerHTML = `<svg viewBox="0 0 ${W} ${RH}" width="${W}" height="${RH}">
+    <rect x="${m.l}" y="${ry(100)}" width="${iw}" height="${ry(70) - ry(100)}" class="zone-bad"/><rect x="${m.l}" y="${ry(30)}" width="${iw}" height="${ry(0) - ry(30)}" class="zone-good"/>
+    ${[30, 50, 70].map(v => `<line x1="${m.l}" x2="${m.l + iw}" y1="${ry(v)}" y2="${ry(v)}" stroke="var(--grid)"/><text x="${m.l - 8}" y="${ry(v) + 4}" text-anchor="end" class="ax">${v}</text>`).join("")}
+    <path d="${rp}" fill="none" stroke="var(--fg)" stroke-width="1.5"/>
+    <line id="rcx" y1="${rm.t}" y2="${rm.t + rih}" stroke="var(--muted)" stroke-dasharray="3 3" style="display:none"/></svg>`;
+  const hit = el.querySelector("#phit"), svg = el.querySelector("svg"), tip = el.querySelector("#ptip");
+  const cx = el.querySelector("#pcx"), dot = el.querySelector("#pdot"), rcx = rel.querySelector("#rcx");
+  hit.onmousemove = ev => {
+    const r = svg.getBoundingClientRect(), px = (ev.clientX - r.left) * W / r.width;
+    const k = Math.max(0, Math.min(idx.length - 1, Math.round((px - m.l) / iw * (idx.length - 1)))), i = idx[k];
+    [cx, rcx].forEach(l => { l.setAttribute("x1", x(k)); l.setAttribute("x2", x(k)); l.style.display = ""; });
+    dot.setAttribute("cx", x(k)); dot.setAttribute("cy", y(S.close[i])); dot.style.display = "";
+    const row = (c, n, v) => `<div><span class="sw" style="background:${c}"></span>${n}: <b>${v}</b></div>`;
+    tip.innerHTML = `<div class="muted">${new Date(S.dates[i]).toLocaleDateString("de-DE")}</div>${row("var(--c1)", "Kurs", money(S.close[i], cur))}
+      ${S.sma50[i] != null ? row("var(--c2)", "50-Tage-Schnitt", money(S.sma50[i], cur)) : ""}${S.sma200[i] != null ? row("var(--c3)", "200-Tage-Schnitt", money(S.sma200[i], cur)) : ""}
+      ${S.rsi[i] != null ? row("var(--fg)", "RSI", Math.round(S.rsi[i])) : ""}`;
+    tip.style.display = "block"; const left = x(k) * r.width / W;
+    tip.style.left = (left > r.width - 220 ? left - tip.offsetWidth - 12 : left + 12) + "px"; tip.style.top = "10px";
+  };
+  hit.onmouseleave = () => { [cx, rcx, dot, tip].forEach(e => e.style.display = "none"); };
+}
+async function renderDetail(sym) {
+  const app = document.getElementById("app"), item = DATA.items.find(a => a.symbol === sym);
+  const grpKey = item ? Object.keys(GROUPS).find(k => GROUPS[k][0] === item.group) : null;
+  const crumb = `<p class="crumb"><a href="#/">Start</a> › ${grpKey ? `<a href="#/${grpKey}">${esc(GROUPS[grpKey][1])}</a> › ` : ""}${esc(item ? item.name : sym)}</p>`;
+  if (!item) { app.innerHTML = crumb + `<div class="card">Dieser Wert ist nicht (mehr) in deiner Liste.</div>`; return; }
+  if (newsSym !== sym) { newsSym = sym; document.getElementById("newslist").dataset.loaded = ""; }
+  renderNewsBar();
+  if (!ASSET || ASSET.symbol !== sym) app.innerHTML = crumb + `<div class="loading">Lade Einzelanalyse …</div>`;
+  if (assetLoading) return;
+  assetLoading = fetch(apiUrl("/api/asset?symbol=" + encodeURIComponent(sym))).then(r => r.json()).then(j => { ASSET = j; }).catch(() => {}).finally(() => assetLoading = null);
+  await assetLoading;
+  if (route().view !== "wert" || route().arg !== sym || !ASSET) return;
+  if (ASSET.error) { app.innerHTML = crumb + `<div class="card">${esc(ASSET.error)}</div>`; return; }
+  const a = ASSET, al = DATA.alerts || {current: [], log: []};
+  const curA = al.current.filter(c => c.symbol === sym), logA = al.log.filter(e => e.symbol === sym);
+  app.innerHTML = crumb + `<div class="dhead"><div><h2>${esc(a.name)}</h2><div class="muted">${esc(sym)} · ${esc(a.currency)}${a.profile?.exchange ? " · " + esc(a.profile.exchange) : ""}</div></div>
+      <div style="text-align:right"><div class="dprice">${money(a.price, a.currency)}</div><div class="${a.d1 > 0 ? "up" : "down"}">${pct(a.d1)} heute · ${pct(a.d30)} in 30 Tagen</div></div></div>
+    <section><h2>Signale auf einen Blick</h2>${detailSignals(a)}</section>
+    <section><h2>Kursverlauf</h2><div class="card viz">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <div class="lgd" style="margin:0"><span><i style="background:var(--c1)"></i>Kurs</span><span><i style="background:var(--c2)"></i>50-Tage-Schnitt</span><span><i style="background:var(--c3)"></i>200-Tage-Schnitt</span></div>
+        <div class="ranges">${Object.keys(RANGES).map(k => `<button data-range="${k}" class="${k === chartRange ? "on" : ""}">${k}</button>`).join("")}</div></div>
+      <div class="chartwrap" id="pchart" style="margin-top:8px"></div>
+      <h3 style="margin:12px 0 4px">RSI (14 Tage) <span class="sub muted">· grün = überverkauft (&lt; 30), rot = überkauft (&gt; 70)</span></h3>
+      <div class="chartwrap" id="rchart"></div>
+      <p class="note">${RANGES[chartRange] > 1100 ? "Logarithmische Skala – gleiche Abstände bedeuten gleiche prozentuale Veränderung." : "Mit der Maus über das Diagramm fahren für Details."}</p></div></section>
+    <section><h2>Auffälligkeiten</h2><div class="card alerts"><div><h3>Gerade auffällig</h3>${alertChips(curA)}</div>
+      <div><h3>Bisherige Meldungen</h3>${logA.length ? `<ul class="log">${logA.map(e => `<li><span class="t">${esc(e.time)}</span><span class="k-${e.kind}">${esc(e.text)}</span></li>`).join("")}</ul>` : `<span class="muted" style="font-size:12px">Noch keine.</span>`}</div></div></section>
+    ${profileCard(a)}
+    ${a.symbol === "BTC-USD" ? `<section><h2>Bitcoin-Zyklus</h2>${btcSection(DATA.market.btc)}</section>` : ""}
+    <section><h2>Hätte sich eine Strategie gelohnt?</h2><div class="card"><p style="margin:0 0 10px;font-size:13px">Teste mit echten Kursen der Vergangenheit, ob Trend, RSI, Dip-Kaufen &amp; Co. bei ${esc(a.name)} besser gewesen wären als einfach Halten.</p>
+      <a class="btprimary" style="display:inline-block;padding:7px 14px;border-radius:8px;text-decoration:none" href="#/vergleich/${encodeURIComponent(sym)}">Strategie-Vergleich für ${esc(a.name)} starten →</a></div></section>`;
+  app.querySelectorAll("[data-range]").forEach(b => b.onclick = () => { chartRange = b.dataset.range; renderDetail(sym); });
+  drawPrice();
+}
+window.addEventListener("resize", () => { if (route().view === "wert") drawPrice(); });
+
+const SOURCES = `<section><h2>Woher kommen die Daten?</h2><div class="card"><div class="scroll"><table class="data">
+<thead><tr><th>Was</th><th>Quelle</th><th>Wie aktuell</th></tr></thead><tbody>
+<tr><td><b>Kurse</b> (Aktien, ETFs, Krypto) &amp; Kursverlauf</td><td>Yahoo Finance (über die freie Python-Bibliothek „yfinance“)</td><td>Live-Kurs alle 30–60 s, ca. 1–15 Min. verzögert; Verlauf täglich</td></tr>
+<tr><td><b>Firmenkennzahlen</b> (KGV, KBV, Marge, Schulden …), Profil, Analysten-Kursziele</td><td>Yahoo Finance</td><td>einmal täglich</td></tr>
+<tr><td><b>Suche</b> nach Werten</td><td>Yahoo Finance</td><td>sofort</td></tr>
+<tr><td><b>Trend, RSI, Momentum, Abstand vom Hoch</b></td><td>vom Radar selbst aus den Kursen berechnet</td><td>bei jedem Update</td></tr>
+<tr><td><b>Krypto Fear &amp; Greed</b></td><td>alternative.me</td><td>einmal täglich</td></tr>
+<tr><td><b>Aktien Fear &amp; Greed</b></td><td>CNN Business</td><td>täglich</td></tr>
+<tr><td><b>Shiller-KGV</b></td><td>multpl.com (Daten von Prof. Robert Shiller, Yale)</td><td>monatlich</td></tr>
+<tr><td><b>Bitcoin MVRV &amp; On-Chain-Kurs</b></td><td>Coin Metrics (kostenlose Community-Schnittstelle)</td><td>einmal täglich</td></tr>
+<tr><td><b>News</b></td><td>Google News (Schlagzeilen vieler Medien, nach Aktualität)</td><td>alle 15 Min.</td></tr>
+<tr><td><b>Strategie-Vergleich</b></td><td>Yahoo-Kursverlauf + alternative.me + Coin Metrics</td><td>bei jedem Test</td></tr>
+<tr><td><b>Spielgeld-Bot</b> (optional)</td><td>Alpaca Paper Trading</td><td>nur wenn eingerichtet</td></tr>
+</tbody></table></div>
+<p class="note">Alle Quellen sind kostenlos und brauchen keine Anmeldung. Es sind keine offiziellen Börsen-Echtzeitdaten: Sie können verzögert sein,
+gelegentlich Lücken haben oder ausfallen (dann zeigt der Radar „gerade nicht abrufbar“). Für echte Kauf-Entscheidungen den Kurs immer auch beim eigenen Broker prüfen.
+${STATIC ? "Diese Seite wird etwa alle 15 Minuten von GitHub (in der Cloud) mit denselben Quellen neu berechnet." : "Alles läuft lokal auf deinem Mac – nichts wird irgendwo hochgeladen."}</p></div></section>`;
+
+// ---------- Laden & Live-Update
+async function load(force = false) {
+  if (loading) return;
+  loading = true; setStatus("busy", "Aktualisiere …");
+  try {
+    const r = await fetch(apiUrl("/api/data" + (force ? "?force=1" : "")));
+    if (!r.ok) throw new Error(r.status);
+    DATA = await r.json(); render();
+    countdown = REFRESH_SEC; setStatus("ok");
+  } catch (e) {
+    setStatus("err", STATIC ? "Daten gerade nicht abrufbar – Internet da?" : "Keine Verbindung zum Radar-Programm – läuft es noch?");
+  } finally { loading = false; }
+}
+function setStatus(kind, text) {
+  const dot = document.getElementById("dot");
+  dot.className = "dot" + (kind === "busy" ? " busy" : kind === "err" ? " err" : "");
+  document.getElementById("status").textContent = text || (STATIC
+    ? `Stand ${DATA.built} · wird alle ~15 Min. aktualisiert`
+    : `Live · zuletzt aktualisiert ${DATA.updated} · nächstes Update in ${countdown} s`);
+}
+setInterval(() => {
+  if (loading || !DATA || document.getElementById("dot").classList.contains("err")) return;
+  countdown--; if (countdown <= 0) load(); else setStatus("ok");
+}, 1000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden && countdown < REFRESH_SEC - 10) load(); });
+document.getElementById("refresh").onclick = () => load(true);
+
+function toast(t) { const el = document.getElementById("toast"); el.textContent = t; el.classList.add("show"); setTimeout(() => el.classList.remove("show"), 2600); }
+
+// Entfernen
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-rm]"); if (!b || STATIC) return;
+  const s = b.dataset.rm;
+  await fetch("/api/watchlist/" + encodeURIComponent(s), {method: "DELETE"});
+  DATA.items = DATA.items.filter(a => a.symbol !== s); render(); toast(`${s} entfernt`);
+});
+
+// ---------- Suche
+const q = document.getElementById("q"), res = document.getElementById("results");
+const KIND = {CRYPTOCURRENCY: "Krypto", EQUITY: "Aktie", ETF: "ETF", INDEX: "Index", MUTUALFUND: "Fonds"};
+let timer, results = [], active = -1;
+q.addEventListener("input", () => {
+  clearTimeout(timer);
+  const v = q.value.trim();
+  if (!v) { res.classList.remove("open"); return; }
+  timer = setTimeout(async () => {
+    res.innerHTML = `<div class="res"><span class="nm">Suche …</span></div>`; res.classList.add("open");
+    if (STATIC) {
+      const lv = v.toLowerCase();
+      results = (DATA?.items || []).filter(a => a.name.toLowerCase().includes(lv) || a.symbol.toLowerCase().includes(lv))
+        .map(a => ({symbol: a.symbol, name: a.name, exchange: "", type: {crypto: "CRYPTOCURRENCY", stock: "EQUITY", etf: "ETF"}[a.group], group: a.group}));
+      active = -1;
+      res.innerHTML = results.map((x, i) => `<div class="res" data-i="${i}"><span class="sym">${esc(x.symbol)}</span><span class="nm">${esc(x.name)}</span><span class="kind">${KIND[x.type] || ""}</span></div>`).join("")
+        + `<div class="res"><span class="nm">Neue Werte fügst du am Mac im Radar hinzu – sie erscheinen danach automatisch hier.</span></div>`;
+      return;
+    }
+    results = await (await fetch("/api/search?q=" + encodeURIComponent(v))).json(); active = -1;
+    const have = new Set((DATA?.items || []).map(a => a.symbol));
+    res.innerHTML = results.length ? results.map((x, i) => `<div class="res" data-i="${i}">
+      <span class="sym">${esc(x.symbol)}</span><span class="nm">${esc(x.name)}</span><span class="ex">${esc(x.exchange)}</span>
+      ${have.has(x.symbol) ? '<span class="added">✓ drin</span>' : ""}<span class="kind">${KIND[x.type] || x.type}</span></div>`).join("")
+      : `<div class="res"><span class="nm">Nichts gefunden. Tipp: englischen Namen oder Kürzel probieren (z. B. „bitcoin“, „ADA“, „SAP“).</span></div>`;
+  }, 300);
+});
+q.addEventListener("keydown", e => {
+  const els = res.querySelectorAll(".res[data-i]");
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault(); active = Math.max(0, Math.min(els.length - 1, active + (e.key === "ArrowDown" ? 1 : -1)));
+    els.forEach((el, i) => el.classList.toggle("active", i === active));
+  } else if (e.key === "Enter" && results.length) { add(results[Math.max(0, active)]); }
+  else if (e.key === "Escape") res.classList.remove("open");
+});
+res.addEventListener("click", e => { const el = e.target.closest(".res[data-i]"); if (el) add(results[+el.dataset.i]); });
+document.addEventListener("click", e => { if (!e.target.closest(".search")) res.classList.remove("open"); });
+
+async function add(x) {
+  res.classList.remove("open"); q.value = "";
+  if (STATIC) { location.hash = "#/wert/" + encodeURIComponent(x.symbol); return; } toast(`${x.name} wird hinzugefügt …`);
+  const r = await fetch("/api/watchlist", {method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({symbol: x.symbol, name: x.name, group: x.group})});
+  const j = await r.json();
+  if (!r.ok) { toast(j.error || "Hat nicht geklappt"); return; }
+  toast(`${x.name} hinzugefügt`); load();
+}
+
+load();
+</script>
+</body>
+</html>

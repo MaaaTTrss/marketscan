@@ -1,0 +1,7 @@
+alpaca-py
+yfinance
+pandas
+matplotlib
+python-dotenv
+flask
+qrcode
