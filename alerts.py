@@ -135,7 +135,7 @@ def check(snapshot):
     if st.get("ntfy_notifications") and ntfy_topic():
         send_ntfy_entries(entries)
     if st.get("telegram_notifications") and telegram_config()[1]:
-        send_telegram(format_telegram(entries))
+        send_telegram(format_telegram(entries, snapshot))
     return entries
 
 
@@ -167,7 +167,19 @@ ICON = {"good": "🟢", "bad": "🔴", "info": "🔵"}
 
 def telegram_config():
     env = dotenv_values(ENV_FILE) if os.path.exists(ENV_FILE) else {}
-    return env.get("TELEGRAM_BOT_TOKEN"), env.get("TELEGRAM_CHAT_ID")
+    # In der Cloud kommen beide Werte aus GitHub-Secrets
+    return (env.get("TELEGRAM_BOT_TOKEN") or os.environ.get("TELEGRAM_BOT_TOKEN"),
+            env.get("TELEGRAM_CHAT_ID") or os.environ.get("TELEGRAM_CHAT_ID"))
+
+
+def site_url():
+    """Adresse der Cloud-Seite (für Links in den Nachrichten)."""
+    url = os.environ.get("RADAR_SITE_URL")
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    if not url and "/" in repo:
+        owner, name = repo.split("/", 1)
+        url = f"https://{owner.lower()}.github.io/{name}/"
+    return url
 
 
 def _save_env(key, value):
@@ -210,26 +222,67 @@ def telegram_find_chat():
     return chat.get("first_name") or chat.get("title") or str(chat["id"])
 
 
-def format_telegram(entries):
-    lines = ["<b>📡 Markt-Radar</b>"]
-    for e in entries[:12]:
-        lines.append(f"{ICON.get(e['kind'], '•')} <b>{_h(e['name'])}</b>: {_h(e['text'])}")
-    if len(entries) > 12:
-        lines.append(f"… und {len(entries) - 12} weitere")
-    return "\n".join(lines)
+GROUPS = [("good", "🟢 <b>Spricht eher für Kauf</b>"), ("bad", "🔴 <b>Eher Vorsicht</b>"), ("info", "🔵 <b>Zur Info</b>")]
+
+
+def fmt_price(v, cur="USD"):
+    if v is None:
+        return ""
+    d = 2 if v < 1000 else 0
+    if v < 1:
+        d = 4
+    s = f"{v:,.{d}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"{s} {'$' if cur == 'USD' else '€' if cur == 'EUR' else cur}"
+
+
+def tg_name(name, symbol):
+    """Name als Link auf die Einzelanalyse in der Cloud-Seite (falls bekannt)."""
+    url = site_url()
+    if url and symbol:
+        from urllib.parse import quote
+        return f'<a href="{url}#/wert/{quote(symbol)}">{_h(name)}</a>'
+    return _h(name)
+
+
+def format_telegram(entries, snapshot=None):
+    """Übersichtliche Telegram-Nachricht: nach Art gruppiert, mit Kurs und Tagesänderung."""
+    info = {a["symbol"]: a for a in (snapshot or {}).get("items", [])}
+    when = datetime.now().strftime("%d.%m. %H:%M")
+    n = len(entries)
+    head = f"📡 <b>Markt-Radar</b> · {n} neue Auffälligkeit{'en' if n != 1 else ''}\n<i>{when} Uhr</i>"
+    blocks = [head]
+    for kind, title in GROUPS:
+        part = [e for e in entries if e["kind"] == kind]
+        if not part:
+            continue
+        lines = [title]
+        for e in part[:10]:
+            lines.append(f"• <b>{tg_name(e['name'], e.get('symbol'))}</b>: {_h(e['text'])}")
+            a = info.get(e.get("symbol"))
+            if a and a.get("price") is not None:
+                d1 = a.get("d1")
+                extra = f" · heute {pct(d1)}" if d1 is not None else ""
+                lines.append(f"   <i>{fmt_price(a['price'], a.get('currency', 'USD'))}{extra}</i>")
+        if len(part) > 10:
+            lines.append(f"   … und {len(part) - 10} weitere")
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)
 
 
 def _h(t):
     return str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def send_telegram(text):
+def send_telegram(text, button=True):
     token, chat = telegram_config()
     if not (token and chat):
         return False
+    extra = {}
+    if button and site_url():
+        extra["reply_markup"] = {"inline_keyboard": [[{"text": "📊 Radar öffnen", "url": site_url()}]]}
     try:
         telegram_call("sendMessage", token=token, chat_id=chat, text=text,
-                      parse_mode="HTML", disable_web_page_preview=True)
+                      parse_mode="HTML", disable_web_page_preview=True, **extra)
         return True
     except Exception as e:
         print("Telegram-Versand fehlgeschlagen:", e)

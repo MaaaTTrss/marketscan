@@ -101,6 +101,61 @@ def morning_report(data, now):
     return f"☀️ Morgenbericht {now.strftime('%d.%m.')}", "\n".join(lines)
 
 
+def tg_report(data, now):
+    """Morgenbericht für Telegram: Abschnitte, Tabellen in Festbreitenschrift, Links."""
+    h, m = alerts._h, data["market"]
+    items = [a for a in data["items"] if a.get("d1") is not None and not a.get("error")]
+    days = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+    out = [f"☀️ <b>Morgenbericht</b> · {days[now.weekday()]}, {now.strftime('%d.%m.%Y')}"]
+
+    # Stimmung
+    rows = []
+    for key, label in (("crypto_fng", "Krypto"), ("stock_fng", "Aktien")):
+        f = m.get(key) or {}
+        if f.get("now") is None:
+            continue
+        lab = FNG_DE.get(str(f.get("label", "")).lower(), str(f.get("label", "")))
+        prev = f" (Vortag {f['d1']})" if f.get("d1") is not None else ""
+        rows.append(f"{label:<7}{f['now']:>3}  {lab}{prev}")
+    if rows:
+        out.append("🌡 <b>Stimmung</b> · Fear &amp; Greed (0 = Panik, 100 = Gier)\n<pre>" + h("\n".join(rows)) + "</pre>")
+
+    # Gewinner / Verlierer
+    if items:
+        srt = sorted(items, key=lambda a: a["d1"])
+        w = max(len(a["name"]) for a in items[:]) if items else 10
+        w = min(w, 14)
+        line = lambda a: f"{a['name'][:w]:<{w}} {pct(a['d1']):>9}"
+        up = [a for a in reversed(srt) if a["d1"] >= 0.0005][:3]
+        dn = [a for a in srt if a["d1"] <= -0.0005][:3]
+        if up:
+            out.append("📈 <b>Gewinner</b> (letzter Handelstag)\n<pre>" + h("\n".join(map(line, up))) + "</pre>")
+        if dn:
+            out.append("📉 <b>Verlierer</b>\n<pre>" + h("\n".join(map(line, dn))) + "</pre>")
+
+    # Auffälligkeiten nach Art
+    cur = data["alerts"]["current"]
+    if not cur:
+        out.append("✅ Gerade nichts Auffälliges.")
+    for kind, title in alerts.GROUPS:
+        part = sorted([c for c in cur if c["kind"] == kind], key=lambda c: c["prio"])
+        if not part:
+            continue
+        lines = [title]
+        for c in part[:8]:
+            lines.append(f"• <b>{alerts.tg_name(c['name'], c.get('symbol'))}</b>: {h(c['text'])}")
+        if len(part) > 8:
+            lines.append(f"   … und {len(part) - 8} weitere")
+        out.append("\n".join(lines))
+
+    # Bitcoin-Zyklus kurz
+    b = m.get("btc") or {}
+    if b.get("mvrv") is not None:
+        nums = f"MVRV {b['mvrv']:.2f} · Mayer {b.get('mayer', 0):.2f}".replace(".", ",")
+        out.append(f"₿ <b>Bitcoin-Zyklus</b>\n{nums} · {b.get('days', '?')} Tage seit dem Halving")
+    return "\n\n".join(out)
+
+
 def maybe_send_report(data, now):
     force = os.environ.get("FORCE_REPORT") == "1"
     today = now.strftime("%Y-%m-%d")
@@ -108,12 +163,18 @@ def maybe_send_report(data, now):
     if not force and (now.hour < REPORT_HOUR or last == today):
         return
     title, msg = morning_report(data, now)
+    tg = tg_report(data, now)
     if os.environ.get("RADAR_TEST") == "1":
-        print("--- Morgenbericht (nur Vorschau) ---\n" + title + "\n" + msg)
+        print("--- Morgenbericht ntfy (Vorschau) ---\n" + title + "\n" + msg)
+        print("--- Morgenbericht Telegram (Vorschau) ---\n" + tg)
         return
-    ok = alerts.send_ntfy(title, msg, tags=["sunny"], click=site_url())
-    print("Morgenbericht gesendet" if ok else "Morgenbericht: Senden fehlgeschlagen (NTFY_TOPIC gesetzt?)")
-    if ok and not force:
+    sent = []
+    if alerts.telegram_config()[1]:
+        sent.append(("Telegram", alerts.send_telegram(tg)))
+    if alerts.ntfy_topic():
+        sent.append(("ntfy", alerts.send_ntfy(title, msg, tags=["sunny"], click=site_url())))
+    print("Morgenbericht:", ", ".join(f"{k} {'ok' if v else 'FEHLER'}" for k, v in sent) or "kein Kanal eingerichtet")
+    if any(v for _, v in sent) and not force:
         with open(REPORT_STATE, "w") as f:
             json.dump({"last": today}, f)
 

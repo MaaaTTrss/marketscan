@@ -33,6 +33,8 @@ jobs:
     env:
       TZ: Europe/Berlin
       NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       RADAR_NO_BROWSER: "1"
       FORCE_REPORT: ${{ inputs.report && '1' || '0' }}
     steps:
