@@ -164,15 +164,23 @@ def maybe_send_report(data, now):
         return
     title, msg = morning_report(data, now)
     tg = tg_report(data, now)
+    img = os.path.join(OUT, "data", "report.png")
+    cur = data["alerts"]["current"]
+    n = {k: sum(1 for c in cur if c["kind"] == k) for k in ("good", "bad", "info")}
+    caption = (f"☀️ <b>Morgenbericht</b> · {now.strftime('%d.%m.%Y')}\n"
+               f"🟢 {n['good']} Kaufsignal{'e' if n['good'] != 1 else ''} · 🔴 {n['bad']} Vorsicht · 🔵 {n['info']} Hinweise")
     if os.environ.get("RADAR_TEST") == "1":
         print("--- Morgenbericht ntfy (Vorschau) ---\n" + title + "\n" + msg)
         print("--- Morgenbericht Telegram (Vorschau) ---\n" + tg)
         return
     sent = []
+    have_img = os.path.exists(img)
     if alerts.telegram_config()[1]:
-        sent.append(("Telegram", alerts.send_telegram(tg)))
+        ok = alerts.send_telegram_photo(img, caption) if have_img else False
+        sent.append(("Telegram", ok or alerts.send_telegram(tg)))   # ohne Bild: Text-Version
     if alerts.ntfy_topic():
-        sent.append(("ntfy", alerts.send_ntfy(title, msg, tags=["sunny"], click=site_url())))
+        ok = alerts.send_ntfy_image(img, title, "Tippen öffnet den Radar.", click=site_url()) if have_img else False
+        sent.append(("ntfy", ok or alerts.send_ntfy(title, msg, tags=["sunny"], click=site_url())))
     print("Morgenbericht:", ", ".join(f"{k} {'ok' if v else 'FEHLER'}" for k, v in sent) or "kein Kanal eingerichtet")
     if any(v for _, v in sent) and not force:
         with open(REPORT_STATE, "w") as f:
@@ -197,6 +205,11 @@ def main():
     data["built_ts"] = int(time.time())
     write("data.json", data)
     print(f"Übersicht: {len(data['items'])} Werte, {len(data['alerts']['current'])} gerade auffällig")
+    try:
+        import report_image
+        report_image.render(data, now, os.path.join(OUT, "data", "report.png"))
+    except Exception as e:
+        print("Berichtsbild fehlgeschlagen:", e)
     maybe_send_report(data, now)
 
     # 2) Detailseiten + News je Wert

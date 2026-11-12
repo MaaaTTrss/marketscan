@@ -289,6 +289,26 @@ def send_telegram(text, button=True):
         return False
 
 
+def send_telegram_photo(path, caption):
+    """Bild (z. B. Morgenbericht) mit kurzer Bildunterschrift und Knopf schicken."""
+    token, chat = telegram_config()
+    if not (token and chat):
+        return False
+    data = {"chat_id": chat, "caption": caption[:1024], "parse_mode": "HTML"}
+    if site_url():
+        data["reply_markup"] = json.dumps({"inline_keyboard": [[{"text": "📊 Radar öffnen", "url": site_url()}]]})
+    try:
+        with open(path, "rb") as f:
+            r = requests.post(TG.format(token=token, method="sendPhoto"), data=data,
+                              files={"photo": ("morgenbericht.png", f, "image/png")}, timeout=30).json()
+        if not r.get("ok"):
+            raise RuntimeError(r.get("description"))
+        return True
+    except Exception as e:
+        print("Telegram-Bild fehlgeschlagen:", e)
+        return False
+
+
 # ---------------------------------------------------------------- ntfy (Handy, ohne Konto)
 NTFY_SERVER = "https://ntfy.sh"
 _ALPHA = "abcdefghjkmnpqrstuvwxyz23456789"   # ohne verwechselbare Zeichen (0/o, 1/l/i)
@@ -320,6 +340,23 @@ def send_ntfy(title, message, tags=None, priority=3, click=None):
         return r.ok
     except Exception as e:
         print("ntfy-Versand fehlgeschlagen:", e)
+        return False
+
+
+def send_ntfy_image(path, title, message, click=None):
+    """Bild als Anhang über ntfy (Titel/Text als URL-Parameter, damit Umlaute/Emojis gehen)."""
+    topic = ntfy_topic()
+    if not topic:
+        return False
+    params = {"title": title, "message": message, "filename": "morgenbericht.png", "tags": "sunny"}
+    if click:
+        params["click"] = click
+    try:
+        with open(path, "rb") as f:
+            r = requests.put(f"{NTFY_SERVER}/{topic}", params=params, data=f, timeout=30)
+        return r.ok
+    except Exception as e:
+        print("ntfy-Bild fehlgeschlagen:", e)
         return False
 
 
