@@ -305,7 +305,7 @@ def main():
     html = html.replace("<head>", "<head>\n<script>window.RADAR_STATIC = true;</script>", 1)
     with open(os.path.join(OUT, "index.html"), "w", encoding="utf-8") as f:
         f.write(html)
-    manifest = {"name": "Markt-Radar", "short_name": "Radar", "start_url": "./", "display": "standalone",
+    manifest = {"name": "MarketScan", "short_name": "MarketScan", "start_url": "./", "display": "standalone",
                 "background_color": "#0f1115", "theme_color": "#0f1115",
                 "icons": [{"src": "static/icon-192.png", "sizes": "192x192", "type": "image/png"},
                           {"src": "static/icon-512.png", "sizes": "512x512", "type": "image/png"}]}

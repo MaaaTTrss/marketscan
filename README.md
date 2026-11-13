@@ -52,7 +52,7 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 Alle Stellschrauben stehen in `config.py` (Symbole, Durchschnitte, Risiko).
 Nach jeder Änderung erst `backtest.py` laufen lassen, dann `bot.py`.
 
-## Markt-Radar (live)
+## MarketScan (live)
 
 **Starten:** Doppelklick auf `Radar starten.command` – oder im Terminal:
 

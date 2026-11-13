@@ -190,9 +190,9 @@ def check(snapshot, private=None):
 def notify(entries):
     if len(entries) == 1:
         e = entries[0]
-        title, text = f"Markt-Radar: {e['name']}", e["text"]
+        title, text = f"MarketScan: {e['name']}", e["text"]
     else:
-        title = f"Markt-Radar: {len(entries)} neue Auffälligkeiten"
+        title = f"MarketScan: {len(entries)} neue Auffälligkeiten"
         text = " · ".join(f"{e['name']}: {e['text']}" for e in entries[:4])
     send_mac(title, text)
 
@@ -297,7 +297,7 @@ def format_telegram(entries, snapshot=None):
     info = {a["symbol"]: a for a in (snapshot or {}).get("items", [])}
     when = datetime.now().strftime("%d.%m. %H:%M")
     n = len(entries)
-    head = f"📡 <b>Markt-Radar</b> · {n} neue Auffälligkeit{'en' if n != 1 else ''}\n<i>{when} Uhr</i>"
+    head = f"📡 <b>MarketScan</b> · {n} neue Auffälligkeit{'en' if n != 1 else ''}\n<i>{when} Uhr</i>"
     blocks = [head]
     for kind, title in GROUPS:
         part = [e for e in entries if e["kind"] == kind]
@@ -327,7 +327,7 @@ def send_telegram(text, button=True):
         return False
     extra = {}
     if button and site_url():
-        extra["reply_markup"] = {"inline_keyboard": [[{"text": "📊 Radar öffnen", "url": site_url()}]]}
+        extra["reply_markup"] = {"inline_keyboard": [[{"text": "📊 MarketScan öffnen", "url": site_url()}]]}
     try:
         telegram_call("sendMessage", token=token, chat_id=chat, text=text,
                       parse_mode="HTML", disable_web_page_preview=True, **extra)
@@ -344,7 +344,7 @@ def send_telegram_photo(path, caption):
         return False
     data = {"chat_id": chat, "caption": caption[:1024], "parse_mode": "HTML"}
     if site_url():
-        data["reply_markup"] = json.dumps({"inline_keyboard": [[{"text": "📊 Radar öffnen", "url": site_url()}]]})
+        data["reply_markup"] = json.dumps({"inline_keyboard": [[{"text": "📊 MarketScan öffnen", "url": site_url()}]]})
     try:
         with open(path, "rb") as f:
             r = requests.post(TG.format(token=token, method="sendPhoto"), data=data,
@@ -411,9 +411,9 @@ def send_ntfy_image(path, title, message, click=None):
 def send_ntfy_entries(entries):
     if len(entries) == 1:
         e = entries[0]
-        title, msg = f"Markt-Radar: {e['name']}", f"{ICON.get(e['kind'], '•')} {e['text']}"
+        title, msg = f"MarketScan: {e['name']}", f"{ICON.get(e['kind'], '•')} {e['text']}"
     else:
-        title = f"Markt-Radar: {len(entries)} neue Auffälligkeiten"
+        title = f"MarketScan: {len(entries)} neue Auffälligkeiten"
         msg = "\n".join(f"{ICON.get(e['kind'], '•')} {e['name']}: {e['text']}" for e in entries[:12])
     important = any(e.get("prio", 0) >= 3 for e in entries)
     return send_ntfy(title, msg, tags=["chart_with_upwards_trend"], priority=4 if important else 3)

@@ -1,4 +1,4 @@
-"""Deine Beobachtungsliste für den Markt-Radar. Einfach Einträge hinzufügen/löschen.
+"""Deine Beobachtungsliste für den MarketScan. Einfach Einträge hinzufügen/löschen.
 
 Krypto-Kürzel wie bei Yahoo Finance: <COIN>-USD
 """

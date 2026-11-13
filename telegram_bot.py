@@ -16,7 +16,7 @@ import re
 import alerts
 import private_store
 
-HELP = """<b>📡 Markt-Radar – Befehle</b>
+HELP = """<b>📡 MarketScan – Befehle</b>
 
 <b>Kurse</b>
 /kurs btc – Kurs &amp; Signale eines Werts

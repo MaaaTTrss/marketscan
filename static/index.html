@@ -3,12 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Markt-Radar</title>
+<title>MarketScan</title>
 <meta name="theme-color" content="#0f1115">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Radar">
+<meta name="apple-mobile-web-app-title" content="MarketScan">
 <link rel="apple-touch-icon" href="/static/icon-180.png">
 <link rel="icon" type="image/png" href="/static/icon-192.png">
 <link rel="manifest" id="mf" href="/manifest.webmanifest">
@@ -136,11 +136,19 @@ dialog h3{font-size:17px;margin:0 0 4px}
 .brand .b1{animation-delay:.55s}.brand .b2{animation-delay:2.6s}.brand .b3{animation-delay:1.7s}
 @keyframes sweep{to{transform:rotate(360deg)}}
 @keyframes blip{0%{opacity:1}60%{opacity:.15}100%{opacity:0}}
-.brand .wordmark{font-size:28px;font-weight:800;letter-spacing:-.02em;line-height:1;
-  background:linear-gradient(90deg,var(--b1),var(--b2));-webkit-background-clip:text;background-clip:text;color:transparent}
-.brand .dash{color:var(--muted);-webkit-text-fill-color:var(--muted);margin:0 2px;font-weight:400}
-.brand:hover .wordmark{filter:brightness(1.15)}
-@media (prefers-reduced-motion:reduce){.brand .sweep,.brand .blip{animation:none}.brand .blip{opacity:.8}}
+.brand .wm{display:flex;flex-direction:column;gap:3px}
+.brand .wordmark{font:900 30px/1 ui-rounded,"SF Pro Rounded",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:-.035em;display:inline-flex;position:relative}
+.brand .w1{color:var(--fg)}
+.brand .w2{position:relative;background:linear-gradient(100deg,var(--b1) 0%,#22d3ee 45%,var(--b2) 70%,var(--b1) 100%);background-size:220% 100%;
+  -webkit-background-clip:text;background-clip:text;color:transparent;animation:shine 6s linear infinite;
+  filter:drop-shadow(0 0 10px color-mix(in srgb,var(--b1) 35%,transparent))}
+.brand .wordmark::after{content:"";position:absolute;top:-4px;bottom:-4px;width:2px;left:0;border-radius:2px;
+  background:linear-gradient(transparent,var(--b1),transparent);box-shadow:0 0 12px 2px var(--b1);opacity:0;animation:scanline 4s ease-in-out infinite}
+.brand .tagline{font-size:10px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--muted)}
+@keyframes shine{to{background-position:-220% 0}}
+@keyframes scanline{0%{left:0;opacity:0}10%{opacity:.9}55%{left:100%;opacity:.9}65%,100%{left:100%;opacity:0}}
+.brand:hover .w2{filter:drop-shadow(0 0 14px color-mix(in srgb,var(--b1) 60%,transparent)) brightness(1.15)}
+@media (prefers-reduced-motion:reduce){.brand .sweep,.brand .blip,.brand .w2,.brand .wordmark::after{animation:none}.brand .blip{opacity:.8}}
 .topicbox{display:flex;align-items:center;gap:8px;margin:6px 0 8px}
 .topicbox code{font-size:18px;font-weight:700;letter-spacing:.04em;padding:6px 10px;background:var(--line);border-radius:8px;user-select:all}
 .qrwrap{display:flex;gap:14px;align-items:center;margin-top:6px}.qrwrap img{width:120px;height:120px;background:#fff;border-radius:8px;padding:4px}
@@ -171,7 +179,7 @@ body{padding-top:max(24px,env(safe-area-inset-top));padding-left:max(16px,env(sa
   #refresh{font-size:0;padding:6px 9px}#refresh::before{content:"↻";font-size:15px}
   .search{min-width:0;max-width:none}
   body>.legend .pill{font-size:11px;padding:1px 7px}
-  .brand{gap:8px}.brand .radar{width:34px;height:34px}.brand .wordmark{font-size:22px}
+  .brand{gap:8px}.brand .radar{width:34px;height:34px}.brand .wordmark{font-size:23px}.brand .tagline{display:none}
   .tabs{margin-top:10px}.tabs a{padding:9px 10px}
   h2{margin-top:22px}
 }
@@ -189,7 +197,8 @@ body{padding-top:max(24px,env(safe-area-inset-top));padding-left:max(16px,env(sa
         <circle cx="33" cy="15" r="2.2" class="blip b1"/><circle cx="14" cy="30" r="1.8" class="blip b2"/><circle cx="31" cy="34" r="1.6" class="blip b3"/>
         <circle cx="24" cy="24" r="1.8" fill="var(--b1)"/>
       </svg>
-      <span class="wordmark">Markt<span class="dash">·</span>Radar</span></a>
+      <span class="wm"><span class="wordmark"><span class="w1">Market</span><span class="w2" data-t="Scan">Scan</span></span>
+        <span class="tagline">Krypto · Aktien · ETFs</span></span></a>
     <div class="live"><span class="dot busy" id="dot"></span><span id="status">Lade Daten …</span>
       <button id="refresh" title="Jetzt aktualisieren">↻ Aktualisieren</button></div>
   </div>
@@ -254,7 +263,7 @@ body{padding-top:max(24px,env(safe-area-inset-top));padding-left:max(16px,env(sa
   <p class="muted" style="font-size:13px;margin:0 0 8px">Über Telegram – kostenlos, dauert etwa 2 Minuten. Du brauchst die Telegram-App auf dem Handy.</p>
   <div class="step" id="st1"><span class="n">1</span><div style="flex:1">
     <p>In Telegram den offiziellen Chat <a href="https://t.me/BotFather" target="_blank" rel="noopener"><b>@BotFather</b></a> öffnen, <code>/newbot</code> senden,
-    einen Namen (z. B. „Mein Markt-Radar“) und einen Benutzernamen, der auf <code>bot</code> endet, wählen.
+    einen Namen (z. B. „Mein MarketScan“) und einen Benutzernamen, der auf <code>bot</code> endet, wählen.
     BotFather schickt dir dann einen <b>Token</b> (sieht aus wie <code>123456:ABC-…</code>). Kopier ihn hier rein:</p>
     <input id="tgToken" placeholder="Token hier einfügen" autocomplete="off" spellcheck="false">
     <button id="tgSave">Token speichern</button><div class="msg" id="m1"></div></div></div>

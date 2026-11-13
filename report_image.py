@@ -133,10 +133,16 @@ def render(data, now, path, depot=None, week=None):
 
     # Kopf
     y = PAD
-    t1 = ax.text(PAD, y + 0.05, "Markt", color="#22c55e", fontsize=17, fontweight="bold", va="top")
-    bb = t1.get_window_extent(renderer=fig.canvas.get_renderer())
-    x1 = ax.transData.inverted().transform((bb.x1, 0))[0]
-    ax.text(x1, y + 0.05, "·Radar", color="#3b82f6", fontsize=17, fontweight="bold", va="top")
+    # Wortmarke "MarketScan": Market weiß, Scan mit Farbverlauf grün -> blau (Buchstabe für Buchstabe)
+    rnd = fig.canvas.get_renderer()
+    inv = ax.transData.inverted()
+    t1 = ax.text(PAD, y + 0.03, "Market", color=FG, fontsize=18, fontweight="heavy", va="top")
+    x = inv.transform((t1.get_window_extent(renderer=rnd).x1, 0))[0]
+    grad = ["#4ade80", "#22d3ee", "#38bdf8", "#60a5fa"]
+    for ch, col in zip("Scan", grad):
+        t = ax.text(x, y + 0.03, ch, color=col, fontsize=18, fontweight="heavy", va="top")
+        x = inv.transform((t.get_window_extent(renderer=rnd).x1, 0))[0]
+    ax.text(PAD + 0.02, y + 0.43, "KRYPTO · AKTIEN · ETFS", color=MUTED, fontsize=6, fontweight="bold", va="top")
     ax.text(W - PAD, y + 0.02, "Wochenrückblick" if week else "Morgenbericht", color=FG, fontsize=10,
             fontweight="bold", va="top", ha="right")
     if week:

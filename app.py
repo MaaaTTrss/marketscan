@@ -1,4 +1,4 @@
-"""Markt-Radar als Live-App: läuft lokal auf deinem Mac, aktualisiert sich selbst,
+"""MarketScan als Live-App: läuft lokal auf deinem Mac, aktualisiert sich selbst,
 und du kannst beliebige Coins, Aktien und ETFs suchen und hinzufügen.
 
 Starten:  .venv/bin/python app.py      (oder Doppelklick auf "Radar starten.command")
@@ -295,8 +295,8 @@ def phone_url():
 
 
 LOCKED_PAGE = """<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
-<title>Markt-Radar</title><body style="font:16px -apple-system,sans-serif;padding:32px;max-width:420px;margin:auto">
-<h2>🔒 Markt-Radar</h2><p>Bitte öffne den Radar über den QR-Code am Mac:<br>
+<title>MarketScan</title><body style="font:16px -apple-system,sans-serif;padding:32px;max-width:420px;margin:auto">
+<h2>🔒 MarketScan</h2><p>Bitte öffne den Radar über den QR-Code am Mac:<br>
 <b>Start → Auffälligkeiten → „Auf dem Handy öffnen“</b>.</p></body>"""
 
 
@@ -353,7 +353,7 @@ def manifest():
     # start_url mit Schlüssel, damit das Icon auf dem Startbildschirm direkt reinkommt
     k = request.args.get("k", "")
     start = f"/?k={k}" if k and secrets.compare_digest(k, access_key()) else "/"
-    data = {"name": "Markt-Radar", "short_name": "Radar", "start_url": start, "display": "standalone",
+    data = {"name": "MarketScan", "short_name": "MarketScan", "start_url": start, "display": "standalone",
             "background_color": "#0f1115", "theme_color": "#0f1115",
             "icons": [{"src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png"},
                       {"src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png"}]}
@@ -532,7 +532,7 @@ def api_ntfy_qr():
 
 @app.route("/api/ntfy/test", methods=["POST"])
 def api_ntfy_test():
-    ok = alerts.send_ntfy("Markt-Radar", "✅ Verbunden! Ab jetzt meldet sich der Radar hier, sobald etwas neu auffällig wird.",
+    ok = alerts.send_ntfy("MarketScan", "✅ Verbunden! Ab jetzt meldet sich der Radar hier, sobald etwas neu auffällig wird.",
                           tags=["satellite"])
     return (jsonify({"ok": True}) if ok else (jsonify({"error": "Senden fehlgeschlagen – erst „Einrichten“ klicken."}), 400))
 
@@ -562,7 +562,7 @@ def api_tg_token():
 def api_tg_connect():
     try:
         name = alerts.telegram_find_chat()
-        alerts.send_telegram(f"✅ Verbunden! Hallo {alerts._h(name)} – ab jetzt meldet sich der Markt-Radar hier, "
+        alerts.send_telegram(f"✅ Verbunden! Hallo {alerts._h(name)} – ab jetzt meldet sich der MarketScan hier, "
                              "sobald etwas neu auffällig wird.")
         return jsonify({"ok": True, "name": name})
     except Exception as e:
@@ -578,7 +578,7 @@ def api_tg_test():
 
 @app.route("/api/test-notification", methods=["POST"])
 def api_test_notification():
-    alerts.send_mac("Markt-Radar", "Test: Benachrichtigungen funktionieren ✓")
+    alerts.send_mac("MarketScan", "Test: Benachrichtigungen funktionieren ✓")
     return jsonify({"ok": True})
 
 
@@ -776,7 +776,7 @@ def api_remove(sym):
 
 if __name__ == "__main__":
     url = f"http://127.0.0.1:{PORT}"
-    print(f"Markt-Radar läuft auf {url}  (Beenden: Strg+C)")
+    print(f"MarketScan läuft auf {url}  (Beenden: Strg+C)")
     if lan_ip():
         print(f"Auf dem Handy (gleiches WLAN): QR-Code im Radar unter „Auf dem Handy öffnen“")
     threading.Thread(target=background_checker, daemon=True).start()

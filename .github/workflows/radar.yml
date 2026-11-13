@@ -1,6 +1,6 @@
-# Markt-Radar in der Cloud: rechnet alle ~15 Minuten alles neu, schickt neue
+# MarketScan in der Cloud: rechnet alle ~15 Minuten alles neu, schickt neue
 # Auffälligkeiten per ntfy aufs Handy und veröffentlicht die Seite auf GitHub Pages.
-name: Markt-Radar
+name: MarketScan
 
 on:
   schedule:

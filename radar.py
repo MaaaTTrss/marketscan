@@ -1,4 +1,4 @@
-"""Markt-Radar: sammelt Kennzahlen zu deiner Beobachtungsliste und baut daraus
+"""MarketScan: sammelt Kennzahlen zu deiner Beobachtungsliste und baut daraus
 eine Übersichtsseite (radar.html), die sich im Browser öffnet.
 
 Aufruf:  .venv/bin/python radar.py            (öffnet die Seite danach)
@@ -369,8 +369,8 @@ für die <b>nächsten 10 Jahre</b> voraus – für kurzfristiges Timing taugt er
 
     return f"""<!doctype html><html lang="de"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Markt-Radar</title><style>{CSS}</style></head><body>
-<header><div><h1>Markt-Radar</h1><p class="muted">Stand: {now}</p></div>
+<title>MarketScan</title><style>{CSS}</style></head><body>
+<header><div><h1>MarketScan</h1><p class="muted">Stand: {now}</p></div>
 <div class="legend"><span class="pill good">spricht eher für Kauf</span><span class="pill mid">neutral</span><span class="pill bad">eher Vorsicht</span></div></header>
 
 <section><h2>Marktstimmung</h2><div class="grid3">

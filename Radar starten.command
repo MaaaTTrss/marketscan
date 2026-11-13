@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Doppelklick startet den Markt-Radar und öffnet ihn im Browser.
+# Doppelklick startet den MarketScan und öffnet ihn im Browser.
 # Zum Beenden dieses Terminal-Fenster schließen.
 cd "$(dirname "$0")"
 if [ ! -d .venv ]; then
