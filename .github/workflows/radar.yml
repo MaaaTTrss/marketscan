@@ -32,7 +32,8 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     env:
       TZ: Europe/Berlin
-      NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+      # ntfy ist aus (nur Telegram). Wieder an: nächste Zeile einkommentieren.
+      # NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
       RADAR_PRIVATE_KEY: ${{ secrets.RADAR_PRIVATE_KEY }}   # entschlüsselt Depot & Alarme
