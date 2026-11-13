@@ -29,6 +29,7 @@ from dotenv import dotenv_values, set_key
 from flask import Flask, jsonify, make_response, request, send_from_directory
 
 import alerts         # Auffälligkeiten & Mac-Benachrichtigungen
+import private_store  # Depot & Preis-Alarme (verschlüsselt)
 import radar          # Indikator-Funktionen (RSI, Fear & Greed, MVRV, ...)
 import radar_config as cfg
 import vergleich      # Strategie-Vergleich (Backtest)
@@ -67,28 +68,50 @@ def load_wl():
 def save_wl(wl):
     with open(WL_FILE, "w", encoding="utf-8") as f:
         json.dump(wl, f, ensure_ascii=False, indent=2)
-    threading.Thread(target=push_watchlist, daemon=True).start()
+    push_files(["watchlist.json"], "Beobachtungsliste geändert")
 
 
-def push_watchlist():
-    """Ist der Radar mit GitHub verbunden, die geänderte Liste hochladen –
-    dann zeigt auch die Cloud-Version (Handy) gleich die neuen Werte."""
+git_lock = threading.Lock()
+
+
+def _git(*a):
     import subprocess
-    if not os.path.isdir(os.path.join(BASE, ".git")):
+    return subprocess.run(["git", *a], cwd=BASE, capture_output=True, text=True, timeout=60)
+
+
+def git_ready():
+    return os.path.isdir(os.path.join(BASE, ".git")) and bool(_git("remote").stdout.strip())
+
+
+def push_files(files, msg):
+    """Ist der Radar mit GitHub verbunden, Änderungen hochladen – dann hat auch die Cloud sie."""
+    if os.environ.get("GITHUB_ACTIONS"):
+        return   # in der Cloud lädt der Workflow selbst hoch
+    threading.Thread(target=_push, args=(files, msg), daemon=True).start()
+
+
+def git_pull():
+    """Änderungen aus der Cloud holen (z. B. per Telegram hinzugefügte Werte)."""
+    if os.environ.get("GITHUB_ACTIONS") or not git_ready():
         return
-    run = lambda *a: subprocess.run(["git", *a], cwd=BASE, capture_output=True, text=True, timeout=60)
-    try:
-        if not run("remote").stdout.strip():
-            return
-        run("add", "watchlist.json")
-        if run("diff", "--cached", "--quiet").returncode == 0:
-            return
-        run("commit", "-m", "Beobachtungsliste geändert")
-        r = run("pull", "--rebase", "--autostash")
-        r = run("push")
-        print("Liste zu GitHub hochgeladen" if r.returncode == 0 else f"GitHub-Upload fehlgeschlagen: {r.stderr.strip()[:200]}")
-    except Exception as e:
-        print("GitHub-Upload fehlgeschlagen:", e)
+    with git_lock:
+        _git("pull", "--rebase", "--autostash", "-q")
+
+
+def _push(files, msg):
+    if not git_ready():
+        return
+    with git_lock:
+        try:
+            _git("add", *files)
+            if _git("diff", "--cached", "--quiet").returncode == 0:
+                return
+            _git("commit", "-m", msg)
+            _git("pull", "--rebase", "--autostash")
+            r = _git("push")
+            print("Zu GitHub hochgeladen" if r.returncode == 0 else f"GitHub-Upload fehlgeschlagen: {r.stderr.strip()[:200]}")
+        except Exception as e:
+            print("GitHub-Upload fehlgeschlagen:", e)
 
 
 # ---------------------------------------------------------------- Daten holen
@@ -136,6 +159,34 @@ def get_fund(symbols):
             for s, f in zip(todo, ex.map(radar.fundamentals, todo)):
                 cache["fund"][s] = (now, f)
     return {s: cache["fund"][s][1] for s in symbols if s in cache["fund"]}
+
+
+EARN_TTL = 24 * 3600
+earn_cache = {}
+
+
+def _earn_one(sym):
+    try:
+        cal = yf.Ticker(sym).calendar or {}
+        ds = cal.get("Earnings Date") if isinstance(cal, dict) else None
+        if ds:
+            today = datetime.now().date()
+            fut = sorted(d for d in ds if hasattr(d, "year") and d >= today)
+            return fut[0].strftime("%Y-%m-%d") if fut else None
+    except Exception:
+        pass
+    return None
+
+
+def get_earnings(symbols):
+    """Nächster Termin für Quartalszahlen je Aktie (einmal täglich abgefragt)."""
+    now = time.time()
+    todo = [s for s in symbols if s not in earn_cache or now - earn_cache[s][0] > EARN_TTL]
+    if todo:
+        with ThreadPoolExecutor(6) as ex:
+            for s, d in zip(todo, ex.map(_earn_one, todo)):
+                earn_cache[s] = (now, d)
+    return {s: earn_cache[s][1] for s in symbols if s in earn_cache}
 
 
 def clean(v):
@@ -333,6 +384,7 @@ def snapshot(force=False):
         hist = get_hist(syms)
         live = get_live(syms) if syms else {}
         fund = get_fund([w["symbol"] for w in wl if w["group"] == "stock"])
+        earn = get_earnings([w["symbol"] for w in wl if w["group"] == "stock"])
         market = get_market()
     items = []
     for w in wl:
@@ -347,17 +399,18 @@ def snapshot(force=False):
             item["error"] = "Keine Kursdaten"
         if w["group"] == "stock":
             item["fund"] = {k: clean(v) for k, v in fund.get(s, {}).items()}
+            item["earnings"] = earn.get(s)
         items.append(item)
     snap = {"updated": datetime.now().strftime("%H:%M:%S"), "items": items, "market": market}
     with alert_lock:
-        alerts.check(snap)
+        alerts.check(snap, private_store.load())
     return snap
 
 
 @app.route("/api/data")
 def api_data():
     snap = snapshot(force=request.args.get("force") == "1")
-    snap["alerts"] = {"current": [c for c in alerts.conditions(snap) if c["prio"] > 0],
+    snap["alerts"] = {"current": [c for c in alerts.conditions(snap, private_store.load()) if c["prio"] > 0],
                       "log": alerts.log()[:30], "settings": alerts.settings()}
     return jsonify(snap)
 
@@ -370,10 +423,72 @@ alert_lock = threading.Lock()
 def background_checker():
     while True:
         try:
+            git_pull()
             snapshot()
         except Exception as e:
             print("Hintergrund-Prüfung fehlgeschlagen:", e)
         time.sleep(CHECK_EVERY)
+
+
+# ---------------------------------------------------------------- Depot & Preis-Alarme
+def _item(sym):
+    return next((w for w in load_wl() if w["symbol"] == sym), None)
+
+
+@app.route("/api/private")
+def api_private():
+    d = private_store.load()
+    snap = snapshot()
+    return jsonify({"alarms": d["alarms"], "depot": d["depot"],
+                    "summary": private_store.summary(d["depot"], snap["items"])})
+
+
+@app.route("/api/alarms", methods=["POST"])
+def api_alarm_add():
+    j = request.get_json(force=True)
+    it = _item(j.get("symbol"))
+    if not it:
+        return jsonify({"error": "Wert nicht in deiner Liste"}), 400
+    try:
+        price = float(str(j.get("price")).replace(",", "."))
+    except ValueError:
+        return jsonify({"error": "Preis ungültig"}), 400
+    op = "above" if j.get("op") == "above" else "below"
+    a = private_store.add_alarm(it["symbol"], it["name"], op, price)
+    push_files(["private.enc"], "Preis-Alarm geändert")
+    return jsonify(a)
+
+
+@app.route("/api/alarms/<aid>", methods=["DELETE"])
+def api_alarm_del(aid):
+    private_store.remove_alarm(aid)
+    push_files(["private.enc"], "Preis-Alarm geändert")
+    return jsonify({"ok": True})
+
+
+@app.route("/api/depot", methods=["POST"])
+def api_depot_add():
+    j = request.get_json(force=True)
+    it = _item(j.get("symbol"))
+    if not it:
+        return jsonify({"error": "Wert nicht in deiner Liste"}), 400
+    try:
+        qty = float(str(j.get("qty")).replace(",", "."))
+        price = float(str(j.get("price")).replace(",", "."))
+    except ValueError:
+        return jsonify({"error": "Menge oder Preis ungültig"}), 400
+    if j.get("side") == "sell":
+        qty = -abs(qty)
+    t = private_store.add_trade(it["symbol"], it["name"], qty, price, j.get("date") or None)
+    push_files(["private.enc"], "Depot geändert")
+    return jsonify(t)
+
+
+@app.route("/api/depot/<tid>", methods=["DELETE"])
+def api_depot_del(tid):
+    private_store.remove_trade(tid)
+    push_files(["private.enc"], "Depot geändert")
+    return jsonify({"ok": True})
 
 
 @app.route("/api/settings", methods=["POST"])

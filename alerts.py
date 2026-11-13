@@ -30,9 +30,23 @@ def pct(v):
     return f"{v * 100:+.1f} %".replace(".", ",")
 
 
-def conditions(snapshot):
+WD = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+
+
+def fmt_num(v):
+    d = 0 if v >= 1000 else 2 if v >= 1 else 4
+    return f"{v:,.{d}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def quiet(key):
+    """Dauer-Hinweise (Abstand zum Allzeithoch) nur im Radar zeigen, nicht melden."""
+    return ":dd" in key or key.endswith(":ath")
+
+
+def conditions(snapshot, private=None):
     """Alle gerade zutreffenden Auffälligkeiten.
-    Rückgabe: Liste von dicts {key, symbol, name, kind(good/bad/info), text, prio}"""
+    Rückgabe: Liste von dicts {key, symbol, name, kind(good/bad/info/alarm), text, prio}
+    private = {"alarms": [...]} (Preis-Alarme, nur am Mac / in der Cloud mit Schlüssel)"""
     out = []
 
     def add(key, sym, name, kind, text, prio):
@@ -43,10 +57,32 @@ def conditions(snapshot):
             continue
         s, n, g = a["symbol"], a["name"], a.get("group", "stock")
         if a.get("rsi") is not None:
-            if a["rsi"] < RSI_LOW:
-                add(f"{s}:rsi_low", s, n, "good", f"RSI {a['rsi']:.0f} – überverkauft", 2)
-            elif a["rsi"] > RSI_HIGH:
-                add(f"{s}:rsi_high", s, n, "bad", f"RSI {a['rsi']:.0f} – überkauft", 2)
+            r, tr = a["rsi"], a.get("trend")
+            # RSI zusammen mit dem Trend: überverkauft im Aufwärtstrend ist ein deutlich besseres Zeichen
+            # als im Abwärtstrend (dort fällt es oft einfach weiter).
+            if r < RSI_LOW:
+                if tr == "auf":
+                    add(f"{s}:rsi_low", s, n, "good", f"★ RSI {r:.0f} – überverkauft im Aufwärtstrend", 1)
+                elif tr == "ab":
+                    add(f"{s}:rsi_low", s, n, "info", f"RSI {r:.0f} – überverkauft, aber Abwärtstrend", 3)
+                else:
+                    add(f"{s}:rsi_low", s, n, "good", f"RSI {r:.0f} – überverkauft", 2)
+            elif r > RSI_HIGH:
+                if tr == "ab":
+                    add(f"{s}:rsi_high", s, n, "bad", f"★ RSI {r:.0f} – überkauft im Abwärtstrend", 1)
+                elif tr == "auf":
+                    add(f"{s}:rsi_high", s, n, "info", f"RSI {r:.0f} – überkauft, Aufwärtstrend läuft", 3)
+                else:
+                    add(f"{s}:rsi_high", s, n, "bad", f"RSI {r:.0f} – überkauft", 2)
+        if a.get("earnings"):
+            try:
+                ed = datetime.strptime(a["earnings"], "%Y-%m-%d").date()
+                days = (ed - datetime.now().date()).days
+                if 0 <= days <= 2:
+                    when = "heute" if days == 0 else "morgen" if days == 1 else f"am {WD[ed.weekday()]} {ed.strftime('%d.%m.')}"
+                    add(f"{s}:earn{a['earnings']}", s, n, "info", f"Quartalszahlen {when}", 2)
+            except ValueError:
+                pass
         if a.get("trend") == "auf":
             add(f"{s}:trend_auf", s, n, "good", "Trendwechsel: jetzt Aufwärts", 0)
         elif a.get("trend") == "ab":
@@ -80,6 +116,17 @@ def conditions(snapshot):
             add("btc:mayer_low", "BTC-USD", "Bitcoin", "good", f"Mayer-Multiple {b['mayer']:.2f} – günstig", 2)
         elif b["mayer"] > 2.4:
             add("btc:mayer_high", "BTC-USD", "Bitcoin", "bad", f"Mayer-Multiple {b['mayer']:.2f} – überhitzt", 2)
+    # Preis-Alarme
+    prices = {a["symbol"]: a for a in snapshot["items"] if a.get("price") is not None}
+    for al in (private or {}).get("alarms", []):
+        a = prices.get(al["symbol"])
+        if not a:
+            continue
+        hit = a["price"] <= al["price"] if al["op"] == "below" else a["price"] >= al["price"]
+        if hit:
+            word = "unter" if al["op"] == "below" else "über"
+            add(f"alarm:{al['id']}", al["symbol"], al["name"], "alarm",
+                f"Preis-Alarm: {word} {fmt_num(al['price'])} $ (jetzt {fmt_num(a['price'])} $)", 1)
     out.sort(key=lambda c: -c["prio"])
     return out
 
@@ -110,9 +157,9 @@ def log():
     return _load(LOG_FILE, [])
 
 
-def check(snapshot):
+def check(snapshot, private=None):
     """Vergleicht mit dem letzten Stand, meldet Neues. Gibt die neuen Meldungen zurück."""
-    conds = conditions(snapshot)
+    conds = conditions(snapshot, private)
     state = _load(STATE_FILE, None)
     symbols = [a["symbol"] for a in snapshot["items"]] + [""]
     keys = {c["key"] for c in conds}
@@ -122,7 +169,8 @@ def check(snapshot):
     known = set(state.get("symbols", []))
     prev = set(state.get("active", []))
     # Neu hinzugefügte Werte nicht sofort mit allen Zuständen melden
-    new = [c for c in conds if c["key"] not in prev and (c["symbol"] in known or c["key"].startswith("btc:"))]
+    new = [c for c in conds if c["key"] not in prev and not quiet(c["key"])
+           and (c["symbol"] in known or c["key"].startswith(("btc:", "alarm:")))]
     _save(STATE_FILE, {"active": sorted(keys), "symbols": symbols})
     if not new:
         return []
@@ -162,7 +210,7 @@ def send_mac(title, text):
 
 # ---------------------------------------------------------------- Telegram (Handy)
 TG = "https://api.telegram.org/bot{token}/{method}"
-ICON = {"good": "🟢", "bad": "🔴", "info": "🔵"}
+ICON = {"good": "🟢", "bad": "🔴", "info": "🔵", "alarm": "🔔"}
 
 
 def telegram_config():
@@ -222,7 +270,7 @@ def telegram_find_chat():
     return chat.get("first_name") or chat.get("title") or str(chat["id"])
 
 
-GROUPS = [("good", "🟢 <b>Spricht eher für Kauf</b>"), ("bad", "🔴 <b>Eher Vorsicht</b>"), ("info", "🔵 <b>Zur Info</b>")]
+GROUPS = [("alarm", "🔔 <b>Preis-Alarm</b>"), ("good", "🟢 <b>Spricht eher für Kauf</b>"), ("bad", "🔴 <b>Eher Vorsicht</b>"), ("info", "🔵 <b>Zur Info</b>")]
 
 
 def fmt_price(v, cur="USD"):

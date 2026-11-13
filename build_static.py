@@ -13,10 +13,11 @@ import re
 import shutil
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 os.environ.setdefault("RADAR_NO_BROWSER", "1")
 import alerts  # noqa: E402
+import private_store  # noqa: E402
 import app  # noqa: E402  (nutzt dieselben Funktionen wie der Mac-Radar)
 
 if os.environ.get("RADAR_TEST") == "1":
@@ -51,6 +52,7 @@ def get(client, url):
 
 
 # ---------------------------------------------------------------- Morgenbericht
+WEEK_HOUR = 18                                       # Wochenrückblick sonntags ab dieser Uhrzeit
 REPORT_HOUR = 6                                      # ab dieser Uhrzeit (deutsche Zeit) einmal täglich
 REPORT_STATE = os.path.join(BASE, "report_state.json")
 FNG_DE = {"extreme fear": "extreme Angst", "fear": "Angst", "neutral": "neutral", "greed": "Gier", "extreme greed": "extreme Gier"}
@@ -156,35 +158,79 @@ def tg_report(data, now):
     return "\n\n".join(out)
 
 
-def maybe_send_report(data, now):
-    force = os.environ.get("FORCE_REPORT") == "1"
-    today = now.strftime("%Y-%m-%d")
-    last = json.load(open(REPORT_STATE)).get("last") if os.path.exists(REPORT_STATE) else None
-    if not force and (now.hour < REPORT_HOUR or last == today):
-        return
-    title, msg = morning_report(data, now)
-    tg = tg_report(data, now)
-    img = os.path.join(OUT, "data", "report.png")
-    cur = data["alerts"]["current"]
-    n = {k: sum(1 for c in cur if c["kind"] == k) for k in ("good", "bad", "info")}
-    caption = (f"☀️ <b>Morgenbericht</b> · {now.strftime('%d.%m.%Y')}\n"
-               f"🟢 {n['good']} Kaufsignal{'e' if n['good'] != 1 else ''} · 🔴 {n['bad']} Vorsicht · 🔵 {n['info']} Hinweise")
+def public_copy(data):
+    """Für die öffentliche Seite: Preis-Alarme (privat) herausnehmen."""
+    pub = json.loads(json.dumps(data))
+    pub["alerts"]["current"] = [c for c in pub["alerts"]["current"] if c["kind"] != "alarm"]
+    pub["alerts"]["log"] = [e for e in pub["alerts"]["log"] if e["kind"] != "alarm"]
+    return pub
+
+
+def week_log(now):
+    """Meldungen der letzten 7 Tage (Zeitformat 'TT.MM. HH:MM')."""
+    days = {(now - timedelta(days=i)).strftime("%d.%m.") for i in range(7)}
+    return [e for e in alerts.log() if e.get("time", "")[:6] in days]
+
+
+def send_image(kind, data, now, depot, caption, title, fallback=None):
+    """Privates Bild (mit Depot) erzeugen und über Telegram/ntfy schicken."""
+    import report_image
+    img = os.path.join(BASE, ".cache", f"{kind}.png")   # NICHT in site/ – enthält das Depot
+    os.makedirs(os.path.dirname(img), exist_ok=True)
+    report_image.render(data, now, img, depot=depot if depot and depot["rows"] else None,
+                        week={"log": week_log(now)} if kind == "week" else None)
     if os.environ.get("RADAR_TEST") == "1":
-        print("--- Morgenbericht ntfy (Vorschau) ---\n" + title + "\n" + msg)
-        print("--- Morgenbericht Telegram (Vorschau) ---\n" + tg)
-        return
+        print(f"--- {title} (Vorschau, nicht gesendet) -> {img}\n{caption}")
+        return True
     sent = []
-    have_img = os.path.exists(img)
     if alerts.telegram_config()[1]:
-        ok = alerts.send_telegram_photo(img, caption) if have_img else False
-        sent.append(("Telegram", ok or alerts.send_telegram(tg)))   # ohne Bild: Text-Version
+        ok = alerts.send_telegram_photo(img, caption)
+        sent.append(("Telegram", ok or (bool(fallback) and alerts.send_telegram(fallback))))
     if alerts.ntfy_topic():
-        ok = alerts.send_ntfy_image(img, title, "Tippen öffnet den Radar.", click=site_url()) if have_img else False
-        sent.append(("ntfy", ok or alerts.send_ntfy(title, msg, tags=["sunny"], click=site_url())))
-    print("Morgenbericht:", ", ".join(f"{k} {'ok' if v else 'FEHLER'}" for k, v in sent) or "kein Kanal eingerichtet")
-    if any(v for _, v in sent) and not force:
+        sent.append(("ntfy", alerts.send_ntfy_image(img, title, "Tippen öffnet den Radar.", click=site_url())))
+    print(f"{title}:", ", ".join(f"{k} {'ok' if v else 'FEHLER'}" for k, v in sent) or "kein Kanal eingerichtet")
+    return any(v for _, v in sent)
+
+
+def depot_line(depot, week=False):
+    if not depot or not depot["rows"]:
+        return ""
+    per, pp = (depot["week"], depot["week_pct"]) if week else (depot["day"], depot["day_pct"])
+    sign = lambda v: ("+" if v >= 0 else "−") + alerts.fmt_num(abs(v))
+    return (f"\n💼 Depot {alerts.fmt_num(depot['value'])} $ · {'Woche' if week else 'heute'} {sign(per)} $"
+            + (f" ({alerts.pct(pp)})" if pp is not None else ""))
+
+
+def maybe_send_reports(data, now, depot, force=False):
+    force = force or os.environ.get("FORCE_REPORT") == "1"
+    st = json.load(open(REPORT_STATE)) if os.path.exists(REPORT_STATE) else {}
+    today, wk = now.strftime("%Y-%m-%d"), now.strftime("%G-W%V")
+    cur = data["alerts"]["current"]
+    n = {k: sum(1 for c in cur if c["kind"] == k) for k in ("alarm", "good", "bad", "info")}
+
+    if force or (now.hour >= REPORT_HOUR and st.get("last") != today):
+        caption = (f"☀️ <b>Morgenbericht</b> · {now.strftime('%d.%m.%Y')}\n"
+                   + (f"🔔 {n['alarm']} Preis-Alarm · " if n["alarm"] else "")
+                   + f"🟢 {n['good']} Kaufsignal{'e' if n['good'] != 1 else ''} · 🔴 {n['bad']} Vorsicht"
+                   + depot_line(depot))
+        ok = send_image("day", data, now, depot, caption, f"☀️ Morgenbericht {now.strftime('%d.%m.')}",
+                        fallback=tg_report(data, now))
+        if ok and not force:
+            st["last"] = today
+
+    # Wochenrückblick: sonntags ab 18 Uhr
+    if (now.weekday() == 6 and now.hour >= WEEK_HOUR and st.get("last_week") != wk) or os.environ.get("FORCE_WEEK") == "1":
+        best = sorted([a for a in data["items"] if a.get("d7") is not None], key=lambda a: -a["d7"])
+        caption = (f"📅 <b>Wochenrückblick</b> · KW {now.strftime('%V')}\n"
+                   + (f"Bester: {alerts._h(best[0]['name'])} {alerts.pct(best[0]['d7'])} · "
+                      f"Schwächster: {alerts._h(best[-1]['name'])} {alerts.pct(best[-1]['d7'])}" if best else "")
+                   + depot_line(depot, week=True))
+        ok = send_image("week", data, now, depot, caption, f"📅 Wochenrückblick KW {now.strftime('%V')}")
+        if ok and os.environ.get("FORCE_WEEK") != "1":
+            st["last_week"] = wk
+    if os.environ.get("RADAR_TEST") != "1":
         with open(REPORT_STATE, "w") as f:
-            json.dump({"last": today}, f)
+            json.dump(st, f)
 
 
 def main():
@@ -196,30 +242,48 @@ def main():
     os.makedirs(BT_CACHE, exist_ok=True)
 
     client = app.app.test_client()
-    wl = app.load_wl()
 
-    # 1) Übersicht + Auffälligkeiten (schickt dabei neue Meldungen per ntfy)
+    # 1) Übersicht + Auffälligkeiten (schickt dabei neue Meldungen)
     data = json.loads(get(client, "/api/data"))
     now = datetime.now()
     data["built"] = now.strftime("%d.%m. %H:%M")
     data["built_ts"] = int(time.time())
-    write("data.json", data)
+    pub = public_copy(data)
+    write("data.json", pub)
     print(f"Übersicht: {len(data['items'])} Werte, {len(data['alerts']['current'])} gerade auffällig")
+
+    print(f"  … {time.time() - t0:.0f} s")
+    # 2) Telegram-Befehle beantworten (/kurs, /add, /alarm, /kauf …)
+    import telegram_bot
+    changed = telegram_bot.process(data, client)
+    with open(os.path.join(BASE, ".cache", "changed.json"), "w") as f:
+        json.dump(changed, f)
+
+    print(f"  … {time.time() - t0:.0f} s")
+    # 3) Berichte: öffentliches Bild (ohne Depot) für die Seite, privates zum Verschicken
+    priv = private_store.load()
+    depot = private_store.summary(priv["depot"], data["items"])
     try:
         import report_image
-        report_image.render(data, now, os.path.join(OUT, "data", "report.png"))
+        report_image.render(pub, now, os.path.join(OUT, "data", "report.png"))
     except Exception as e:
         print("Berichtsbild fehlgeschlagen:", e)
-    maybe_send_report(data, now)
+    try:
+        maybe_send_reports(data, now, depot, force=changed.get("report"))
+    except Exception as e:
+        print("Bericht senden fehlgeschlagen:", e)
 
-    # 2) Detailseiten + News je Wert
+    wl = app.load_wl()
+    print(f"  … {time.time() - t0:.0f} s")
+    # 4) Detailseiten + News je Wert
     for w in wl:
         s = w["symbol"]
         write(f"asset/{fn(s)}.json", get(client, f"/api/asset?symbol={s}"))
         for lang in LANGS:
             write(f"news/{fn(s)}-{lang}.json", get(client, f"/api/news?symbol={s}&lang={lang}"))
 
-    # 3) Strategie-Vergleich (rechenintensiv -> nur ~1x am Tag neu)
+    print(f"  … {time.time() - t0:.0f} s")
+    # 5) Strategie-Vergleich (rechenintensiv -> nur ~1x am Tag neu)
     for w in wl:
         s = w["symbol"]
         cached = os.path.join(BT_CACHE, fn(s) + ".json")
@@ -234,7 +298,8 @@ def main():
         with open(cached, encoding="utf-8") as f:
             write(f"backtest/{fn(s)}.json", f.read())
 
-    # 4) Seite: Pfade relativ machen (GitHub Pages liegt unter /<repo>/) und Cloud-Modus einschalten
+    print(f"  … {time.time() - t0:.0f} s")
+    # 6) Seite: Pfade relativ machen (GitHub Pages liegt unter /<repo>/) und Cloud-Modus einschalten
     html = open(os.path.join(BASE, "static", "index.html"), encoding="utf-8").read()
     html = html.replace('"/static/', '"static/').replace('href="/manifest.webmanifest"', 'href="manifest.webmanifest"')
     html = html.replace("<head>", "<head>\n<script>window.RADAR_STATIC = true;</script>", 1)

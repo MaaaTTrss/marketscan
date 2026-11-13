@@ -153,7 +153,15 @@ dialog h3{font-size:17px;margin:0 0 4px}
 @keyframes coinspin{0%,80%{transform:rotateY(0)}90%{transform:rotateY(180deg)}100%{transform:rotateY(360deg)}}
 @media (prefers-reduced-motion:reduce){.tile .ic .ico-crypto{animation:none}}
 h2 .count{font-size:13px;color:var(--muted);font-weight:400;margin-left:6px}
-.static .rm{display:none}
+.static .rm{display:none}.static .privonly{display:none}
+.chip.alarm{background:var(--mid-bg);color:var(--mid)}.k-alarm{color:var(--mid)}
+.form{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.form input,.form select{font:inherit;padding:6px 10px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--fg)}
+.form input[type=number],.form input.n{width:120px}
+.kpi{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums}.kpi small{font-size:13px;font-weight:600;margin-left:6px}
+.alist{list-style:none;padding:0;margin:10px 0 0}.alist li{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px}
+.alist li:last-child{border-bottom:0}.hit{color:var(--mid);font-weight:600}
+.cal li{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px}.cal li:last-child{border:0}.cal{list-style:none;margin:0;padding:0}
 /* Handy */
 body{padding-top:max(24px,env(safe-area-inset-top));padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}
 @media (max-width:600px){
@@ -194,7 +202,7 @@ body{padding-top:max(24px,env(safe-area-inset-top));padding-left:max(16px,env(sa
 
 <nav class="tabs" id="tabs">
   <a href="#/" data-r="start">Start</a><a href="#/krypto" data-r="krypto" data-ic="crypto">Krypto</a><a href="#/aktien" data-r="aktien" data-ic="stock">Aktien</a>
-  <a href="#/etfs" data-r="etfs" data-ic="etf">ETFs &amp; Indizes</a><a href="#/vergleich" data-r="vergleich" data-ic="lab">Strategie-Vergleich</a><a href="#/info" data-r="info" data-ic="info">Datenquellen</a>
+  <a href="#/etfs" data-r="etfs" data-ic="etf">ETFs &amp; Indizes</a><a href="#/depot" data-r="depot" data-ic="wallet" class="privonly">Depot &amp; Alarme</a><a href="#/vergleich" data-r="vergleich" data-ic="lab">Strategie-Vergleich</a><a href="#/info" data-r="info" data-ic="info">Datenquellen</a>
 </nav>
 <div id="top"></div>
 <div id="alerts"></div>
@@ -289,6 +297,8 @@ function money(v, cur) {
   catch { return num(v, d) + " " + (cur || ""); }
 }
 const dv = v => v == null ? -1e12 : v;
+const money2 = (v, cur) => { if (v == null) return "–"; const d = Math.abs(v) >= 1000 ? 0 : 2;
+  try { return v.toLocaleString("de-DE", {style: "currency", currency: cur || "USD", minimumFractionDigits: d, maximumFractionDigits: d}); } catch { return num(v, d); } };
 
 // ---------- Zellen
 function spark(arr, w = 120, h = 32, cls = "spark") {
@@ -462,6 +472,9 @@ const ICONS = {
   lab: `<svg viewBox="0 0 32 32" class="ico" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="#7c3aed"/>
     <path d="M13 7h6M14 7v6l-5.5 9.5A2 2 0 0 0 10.2 25.5h11.6a2 2 0 0 0 1.7-3L18 13V7" fill="none" stroke="#fff" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
     <path d="M11 20h10l1.6 2.8a1 1 0 0 1-.9 1.5H10.3a1 1 0 0 1-.9-1.5z" fill="#ddd6fe"/></svg>`,
+  wallet: `<svg viewBox="0 0 32 32" class="ico" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="#d97706"/>
+    <rect x="6" y="10" width="20" height="14" rx="3" fill="#fff"/><path d="M8 10 L21 6.5 a1.5 1.5 0 0 1 1.9 1.1 L23.5 10" fill="none" stroke="#fde68a" stroke-width="1.6" stroke-linejoin="round"/>
+    <rect x="18" y="14.5" width="8" height="5" rx="2.5" fill="#fbbf24"/><circle cx="21" cy="17" r="1.2" fill="#fff"/></svg>`,
   info: `<svg viewBox="0 0 32 32" class="ico" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="8" fill="#64748b"/>
     <circle cx="16" cy="10" r="2" fill="#fff"/><rect x="14.4" y="14" width="3.2" height="10" rx="1.6" fill="#fff"/></svg>`
 };
@@ -504,7 +517,7 @@ function render() {
     a.dataset.r === r.view || (r.view === "wert" && ASSET && GROUPS[a.dataset.r]?.[0] === ASSET.group)));
   const show = (id, on) => document.getElementById(id).style.display = on ? "" : "none";
   show("alerts", r.view === "start"); show("btSec", r.view === "vergleich");
-  show("newsSec", r.view === "wert"); show("explain", r.view !== "vergleich" && r.view !== "start");
+  show("newsSec", r.view === "wert"); show("explain", r.view !== "vergleich" && r.view !== "start" && r.view !== "depot");
   const app = document.getElementById("app");
   if (r.view !== "start") document.getElementById("top").innerHTML = "";
 
@@ -515,6 +528,7 @@ function render() {
     app.innerHTML = `<section><h2>Größte Bewegungen heute</h2><div class="card movers">
         <div><h3>Gewinner</h3>${moversList(ok.filter(a => a.d1 > 0).slice(0, 5))}</div>
         <div><h3>Verlierer</h3>${moversList(ok.filter(a => a.d1 < 0).reverse().slice(0, 5))}</div></div></section>
+      ${termineSection(items)}
       <section><h2>Marktstimmung</h2><div class="grid3">${fngCrypto(m)}${fngStock(m)}${capeCard(m.cape)}</div></section>`;
   } else if (GROUPS[r.view]) {
     const [grp, title] = GROUPS[r.view], list = g(grp);
@@ -533,6 +547,8 @@ function render() {
     renderDetail(r.arg);
   } else if (r.view === "info") {
     app.innerHTML = SOURCES;
+  } else if (r.view === "depot") {
+    renderDepot();
   }
   document.getElementById("explain").innerHTML = EXPLAIN;
 
@@ -864,6 +880,11 @@ function detailSignals(a) {
     const up = p.targetMeanPrice / a.price - 1;
     out.push(sigCard("Analysten", p.recommendation || "–", "", `Ø Kursziel ${money(p.targetMeanPrice, a.currency)} (${pct(up, 0)}), Spanne ${money(p.targetLowPrice, a.currency)}–${money(p.targetHighPrice, a.currency)}, ${p.numberOfAnalystOpinions || "?"} Analysten. Analysten liegen oft daneben.`, '<span class="tag">Zusatz</span>', true));
   }
+  const it = DATA.items.find(x => x.symbol === a.symbol);
+  if (it?.earnings) {
+    const dd = Math.round((new Date(it.earnings) - new Date(new Date().toISOString().slice(0, 10))) / 864e5);
+    out.push(sigCard("Quartalszahlen", fmtDate(it.earnings), dd <= 7 ? "mid" : "", `${dd === 0 ? "Heute" : dd === 1 ? "Morgen" : `In ${dd} Tagen`}. Rund um die Zahlen schwankt der Kurs oft stark – manchmal 5–10 % an einem Tag.`));
+  }
   if (a.group === "crypto" && DATA.market.crypto_fng) {
     const f = DATA.market.crypto_fng, c = f.now <= 25 ? "good" : f.now >= 75 ? "bad" : "mid";
     out.push(sigCard("Krypto-Stimmung", f.now, c, `Fear &amp; Greed: ${esc(f.label)}. Gilt für den ganzen Kryptomarkt.`, EV.w));
@@ -980,12 +1001,14 @@ async function renderDetail(sym) {
       <p class="note">${RANGES[chartRange] > 1100 ? "Logarithmische Skala – gleiche Abstände bedeuten gleiche prozentuale Veränderung." : "Mit der Maus über das Diagramm fahren für Details."}</p></div></section>
     <section><h2>Auffälligkeiten</h2><div class="card alerts"><div><h3>Gerade auffällig</h3>${alertChips(curA)}</div>
       <div><h3>Bisherige Meldungen</h3>${logA.length ? `<ul class="log">${logA.map(e => `<li><span class="t">${esc(e.time)}</span><span class="k-${e.kind}">${esc(e.text)}</span></li>`).join("")}</ul>` : `<span class="muted" style="font-size:12px">Noch keine.</span>`}</div></div></section>
+    ${STATIC ? "" : `<section class="privonly"><h2>🔔 Preis-Alarm</h2><div class="card" id="alarmBox"><span class="muted">Lade …</span></div></section>`}
     ${profileCard(a)}
     ${a.symbol === "BTC-USD" ? `<section><h2>Bitcoin-Zyklus</h2>${btcSection(DATA.market.btc)}</section>` : ""}
     <section><h2>Hätte sich eine Strategie gelohnt?</h2><div class="card"><p style="margin:0 0 10px;font-size:13px">Teste mit echten Kursen der Vergangenheit, ob Trend, RSI, Dip-Kaufen &amp; Co. bei ${esc(a.name)} besser gewesen wären als einfach Halten.</p>
       <a class="btprimary" style="display:inline-block;padding:7px 14px;border-radius:8px;text-decoration:none" href="#/vergleich/${encodeURIComponent(sym)}">Strategie-Vergleich für ${esc(a.name)} starten →</a></div></section>`;
   app.querySelectorAll("[data-range]").forEach(b => b.onclick = () => { chartRange = b.dataset.range; renderDetail(sym); });
   drawPrice();
+  if (!STATIC) alarmBox(a);
 }
 window.addEventListener("resize", () => { if (route().view === "wert") drawPrice(); });
 
@@ -1007,6 +1030,106 @@ const SOURCES = `<section><h2>Woher kommen die Daten?</h2><div class="card"><div
 gelegentlich Lücken haben oder ausfallen (dann zeigt der Radar „gerade nicht abrufbar“). Für echte Kauf-Entscheidungen den Kurs immer auch beim eigenen Broker prüfen.
 ${STATIC ? "Diese Seite wird etwa alle 15 Minuten von GitHub (in der Cloud) mit denselben Quellen neu berechnet." : "Alles läuft lokal auf deinem Mac – nichts wird irgendwo hochgeladen."}</p></div></section>`;
 
+// ---------- Termine (Quartalszahlen)
+const WDS = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+function fmtDate(d) { const x = new Date(d + "T12:00:00"); return `${WDS[x.getDay()]}, ${x.toLocaleDateString("de-DE", {day: "2-digit", month: "2-digit"})}`; }
+function termineSection(items) {
+  const today = new Date().toISOString().slice(0, 10), lim = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
+  const list = items.filter(a => a.earnings && a.earnings >= today && a.earnings <= lim).sort((a, b) => a.earnings.localeCompare(b.earnings));
+  if (!list.length) return "";
+  return `<section><h2>Termine · Quartalszahlen</h2><div class="card"><ul class="cal">${list.map(a => `<li><a href="#/wert/${encodeURIComponent(a.symbol)}" style="color:inherit"><b>${esc(a.name)}</b></a><span>${fmtDate(a.earnings)}</span></li>`).join("")}</ul>
+    <p class="note">Nächste 30 Tage. An diesen Tagen schwanken Aktien oft besonders stark.</p></div></section>`;
+}
+
+// ---------- Depot & Preis-Alarme (privat, verschlüsselt gespeichert)
+let PRIV = null;
+async function loadPriv() { PRIV = await (await fetch("/api/private")).json(); return PRIV; }
+const alarmHit = id => (DATA.alerts?.current || []).some(c => c.key === "alarm:" + id);
+const opTxt = op => op === "below" ? "fällt unter" : "steigt über";
+function alarmLi(al, withName) {
+  return `<li><span>${withName ? `<b>${esc(al.name)}</b> ` : ""}${opTxt(al.op)} <b>${money(al.price)}</b>${alarmHit(al.id) ? ' <span class="hit">· ausgelöst</span>' : ""}</span>
+    <button class="rm" data-alarm-del="${al.id}" title="Löschen">×</button></li>`;
+}
+async function alarmBox(a) {
+  const box = document.getElementById("alarmBox"); if (!box) return;
+  await loadPriv();
+  const mine = PRIV.alarms.filter(x => x.symbol === a.symbol);
+  box.innerHTML = `<div class="form"><span>Melde dich, wenn ${esc(a.name)}</span>
+      <select id="alOp"><option value="below">unter</option><option value="above">über</option></select>
+      <input id="alPrice" class="n" inputmode="decimal" placeholder="Preis" value="${Math.round(a.price * 0.9 * 100) / 100}">
+      <span>${esc(a.currency || "USD")}</span><button class="btprimary" id="alAdd">Alarm setzen</button></div>
+    ${mine.length ? `<ul class="alist">${mine.map(x => alarmLi(x)).join("")}</ul>` : `<p class="note">Aktueller Kurs: ${money(a.price, a.currency)}. Die Meldung kommt aufs Handy (Telegram/ntfy), sobald der Preis erreicht ist.</p>`}`;
+  document.getElementById("alAdd").onclick = async () => {
+    const r = await fetch("/api/alarms", {method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({symbol: a.symbol, op: document.getElementById("alOp").value, price: document.getElementById("alPrice").value})});
+    const j = await r.json(); if (!r.ok) { toast(j.error || "Hat nicht geklappt"); return; }
+    toast("Alarm gesetzt"); alarmBox(a);
+  };
+}
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-alarm-del]"); if (!b) return;
+  await fetch("/api/alarms/" + b.dataset.alarmDel, {method: "DELETE"}); toast("Alarm gelöscht");
+  if (route().view === "depot") renderDepot(); else if (ASSET) alarmBox(ASSET);
+});
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-trade-del]"); if (!b) return;
+  if (!confirm("Diesen Eintrag löschen?")) return;
+  await fetch("/api/depot/" + b.dataset.tradeDel, {method: "DELETE"}); toast("Eintrag gelöscht"); renderDepot();
+});
+async function renderDepot() {
+  const app = document.getElementById("app");
+  if (STATIC) { app.innerHTML = `<section><h2>Depot &amp; Alarme</h2><div class="card">Dein Depot und deine Preis-Alarme sind privat und erscheinen nicht auf dieser öffentlichen Seite – nur am Mac im Radar und in deinen Telegram-Nachrichten.</div></section>`; return; }
+  if (!PRIV) app.innerHTML = `<div class="loading">Lade Depot …</div>`;
+  await loadPriv();
+  if (route().view !== "depot") return;
+  const S = PRIV.summary, cls = v => v > 0 ? "up" : v < 0 ? "down" : "";
+  const opts = DATA.items.map(a => `<option value="${esc(a.symbol)}">${esc(a.name)}</option>`).join("");
+  const rows = S.rows.map(r => `<tr><td><a href="#/wert/${encodeURIComponent(r.symbol)}" style="color:inherit"><b>${esc(r.name)}</b></a></td>
+      <td class="num">${num(r.qty, r.qty < 10 ? 4 : 2)}</td><td class="num">${money(r.avg, r.currency)}</td><td class="num">${money(r.price, r.currency)}</td>
+      <td class="num"><b>${money2(r.value, r.currency)}</b></td><td class="num ${cls(r.pl)}">${money2(r.pl, r.currency)}</td><td class="num ${cls(r.pl_pct)}">${pct(r.pl_pct)}</td>
+      <td class="num ${cls(r.d1)}">${pct(r.d1)}</td><td class="num">${pct(r.weight, 0, false)}</td></tr>`).join("");
+  const trades = [...PRIV.depot].sort((a, b) => b.date.localeCompare(a.date)).map(t => `<li><span>${esc(t.date)} · ${t.qty >= 0 ? "Kauf" : "Verkauf"} <b>${esc(t.name)}</b> ${num(Math.abs(t.qty), Math.abs(t.qty) < 10 ? 4 : 2)} × ${money(t.price)}</span>
+      <button class="rm" data-trade-del="${t.id}" title="Löschen">×</button></li>`).join("");
+  app.innerHTML = `<section><h2>Mein Depot</h2>
+    ${S.rows.length ? `<div class="grid3">
+      <div class="card"><h3>Wert</h3><div class="kpi">${money2(S.value)}</div><p class="note">Eingesetzt: ${money2(S.cost)}</p></div>
+      <div class="card"><h3>Heute</h3><div class="kpi ${cls(S.day)}">${money2(S.day)}<small>${pct(S.day_pct)}</small></div><p class="note">Diese Woche: <span class="${cls(S.week)}">${money2(S.week)} (${pct(S.week_pct)})</span></p></div>
+      <div class="card"><h3>Gewinn / Verlust gesamt</h3><div class="kpi ${cls(S.pl)}">${money2(S.pl)}<small>${pct(S.pl_pct)}</small></div><p class="note">Seit Kauf, ohne Gebühren und Steuern.</p></div></div>
+    <div class="card scroll" style="margin-top:12px"><table class="data"><thead><tr><th>Wert</th><th class="num">Menge</th><th class="num">Ø Einstand</th><th class="num">Kurs</th><th class="num">Wert</th><th class="num">G/V</th><th class="num">G/V %</th><th class="num">Heute</th><th class="num">Anteil</th></tr></thead><tbody>${rows}</tbody></table></div>`
+    : `<div class="card muted">Noch nichts eingetragen. Trag unten deinen ersten Kauf ein.</div>`}
+    <div class="card"><h3>Kauf oder Verkauf eintragen</h3><div class="form">
+      <select id="tdSide"><option value="buy">Kauf</option><option value="sell">Verkauf</option></select>
+      <select id="tdSym">${opts}</select>
+      <input id="tdQty" class="n" inputmode="decimal" placeholder="Menge (z. B. 0,05)">
+      <span>zu</span><input id="tdPrice" class="n" inputmode="decimal" placeholder="Preis pro Stück">
+      <input id="tdDate" type="date" value="${new Date().toISOString().slice(0, 10)}">
+      <button class="btprimary" id="tdAdd">Eintragen</button></div>
+      <p class="note">Preis in der Währung des Werts (meist US-Dollar). Werte, die nicht in der Liste sind, erst oben über die Suche hinzufügen.</p>
+      ${trades ? `<h3 style="margin-top:14px">Alle Einträge</h3><ul class="alist">${trades}</ul>` : ""}</div></section>
+    <section><h2>🔔 Preis-Alarme</h2><div class="card"><div class="form">
+      <select id="alSym">${opts}</select><select id="alOp2"><option value="below">fällt unter</option><option value="above">steigt über</option></select>
+      <input id="alPrice2" class="n" inputmode="decimal" placeholder="Preis"><button class="btprimary" id="alAdd2">Alarm setzen</button></div>
+      ${PRIV.alarms.length ? `<ul class="alist">${PRIV.alarms.map(x => alarmLi(x, true)).join("")}</ul>` : `<p class="note">Noch keine Alarme. Die Meldung kommt aufs Handy, sobald der Preis erreicht ist (Prüfung etwa alle 15 Minuten in der Cloud).</p>`}</div></section>
+    <p class="note">🔒 Depot und Alarme werden verschlüsselt gespeichert und erscheinen nicht auf der öffentlichen Seite. Per Telegram geht auch: <code>/kauf</code>, <code>/verkauf</code>, <code>/depot</code>, <code>/alarm</code>.</p>`;
+  const fill = (sel, inp) => { const a = DATA.items.find(x => x.symbol === document.getElementById(sel).value); if (a?.price) document.getElementById(inp).placeholder = "jetzt " + num(a.price, a.price >= 1000 ? 0 : 2); };
+  document.getElementById("tdSym").onchange = () => fill("tdSym", "tdPrice"); fill("tdSym", "tdPrice");
+  document.getElementById("alSym").onchange = () => fill("alSym", "alPrice2"); fill("alSym", "alPrice2");
+  document.getElementById("tdAdd").onclick = async () => {
+    const sym = document.getElementById("tdSym").value, a = DATA.items.find(x => x.symbol === sym);
+    const price = document.getElementById("tdPrice").value || (a?.price ?? "");
+    const r = await fetch("/api/depot", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({
+      symbol: sym, side: document.getElementById("tdSide").value, qty: document.getElementById("tdQty").value, price, date: document.getElementById("tdDate").value})});
+    const j = await r.json(); if (!r.ok) { toast(j.error || "Hat nicht geklappt"); return; }
+    toast("Eingetragen"); renderDepot();
+  };
+  document.getElementById("alAdd2").onclick = async () => {
+    const r = await fetch("/api/alarms", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({
+      symbol: document.getElementById("alSym").value, op: document.getElementById("alOp2").value, price: document.getElementById("alPrice2").value})});
+    const j = await r.json(); if (!r.ok) { toast(j.error || "Hat nicht geklappt"); return; }
+    toast("Alarm gesetzt"); renderDepot();
+  };
+}
+
 // ---------- Laden & Live-Update
 async function load(force = false) {
   if (loading) return;
@@ -1014,7 +1137,9 @@ async function load(force = false) {
   try {
     const r = await fetch(apiUrl("/api/data" + (force ? "?force=1" : "")));
     if (!r.ok) throw new Error(r.status);
-    DATA = await r.json(); render();
+    DATA = await r.json();
+    const typing = document.activeElement?.closest?.("#app .form") || document.querySelector("#app .form input:not([type=date])")?.value;
+    if (!typing || force) render();   // nicht neu zeichnen, während du im Formular tippst
     countdown = REFRESH_SEC; setStatus("ok");
   } catch (e) {
     setStatus("err", STATIC ? "Daten gerade nicht abrufbar – Internet da?" : "Keine Verbindung zum Radar-Programm – läuft es noch?");

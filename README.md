@@ -123,6 +123,26 @@ schickt neue Auffälligkeiten per ntfy aufs Handy und stellt die Seite auf GitHu
 - Damit Meldungen nicht doppelt kommen: am Mac „Handy (ntfy)“ ausschalten, sobald die Cloud läuft.
 - Lokal ausprobieren: `RADAR_TEST=1 .venv/bin/python build_static.py` (schickt nichts) → Ergebnis in `site/`.
 
+### Depot, Preis-Alarme & Termine
+
+- **Depot & Alarme** (Reiter am Mac): Käufe/Verkäufe eintragen, Gewinn/Verlust sehen; Preis-Alarme setzen
+  (auch auf jeder Einzelseite). Gespeichert **verschlüsselt** in `private.enc` (Schlüssel `PRIVATE_KEY` in `.env`,
+  in der Cloud `RADAR_PRIVATE_KEY`). Erscheint nie auf der öffentlichen Seite.
+- **Signale**: RSI wird mit dem Trend kombiniert. ★ = überverkauft im Aufwärtstrend (stärker); überverkauft im
+  Abwärtstrend ist nur ein Hinweis. „X % unter Allzeithoch“ wird nicht mehr gemeldet, nur angezeigt.
+- **Quartalszahlen**: Termine auf der Startseite, auf der Einzelseite und als Meldung 2 Tage vorher.
+- **Berichte**: Morgenbericht täglich ab 6 Uhr, Wochenrückblick sonntags ab 18 Uhr – als Bild mit Depot,
+  Kacheln inkl. 30-Tage-Linie, Signalen und Terminen.
+
+### Telegram-Befehle (Antwort beim nächsten Cloud-Lauf, bis ~15 Min.)
+
+`/kurs btc` · `/liste` · `/add dogecoin` · `/weg dogecoin` · `/alarm btc < 70000` · `/alarme` · `/alarmweg 2`
+· `/kauf btc 0,05 70000` · `/verkauf btc 0,02` · `/depot` · `/bericht` · `/hilfe`
+Nur Nachrichten aus deinem eigenen Chat werden beachtet.
+
+**Schlüssel in die Cloud bringen:** Doppelklick auf `Cloud-Schlüssel übertragen.command` (überträgt ntfy, Depot-Schlüssel
+und Telegram aus `.env` als GitHub-Secrets).
+
 ### Alternativ: Telegram
 
 Im Radar bei „Auffälligkeiten“ auf **📱 Handy einrichten** klicken und den 3 Schritten folgen

@@ -35,6 +35,7 @@ jobs:
       NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      RADAR_PRIVATE_KEY: ${{ secrets.RADAR_PRIVATE_KEY }}   # entschlüsselt Depot & Alarme
       RADAR_NO_BROWSER: "1"
       FORCE_REPORT: ${{ inputs.report && '1' || '0' }}
     steps:
@@ -60,6 +61,17 @@ jobs:
           restore-keys: radar-state-
 
       - run: python build_static.py
+
+      # Per Telegram geänderte Liste / Depot / Alarme ins Projekt zurückschreiben
+      - name: Änderungen speichern
+        run: |
+          git config user.name "radar-bot"
+          git config user.email "radar-bot@users.noreply.github.com"
+          git add watchlist.json private.enc 2>/dev/null || true
+          if ! git diff --cached --quiet; then
+            git commit -m "Per Telegram geändert [skip ci]"
+            git pull --rebase -q && git push -q || echo "Hochladen fehlgeschlagen – nächster Lauf versucht es erneut"
+          fi
 
       - uses: actions/cache/save@v4
         if: always()
