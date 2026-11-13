@@ -253,6 +253,9 @@ def main():
     print(f"Übersicht: {len(data['items'])} Werte, {len(data['alerts']['current'])} gerade auffällig")
 
     print(f"  … {time.time() - t0:.0f} s")
+    # Signal-Check (Trefferquote, Spielgeld) für die Seite
+    write("signals.json", get(client, "/api/signals"))
+
     # 2) Telegram-Befehle beantworten (/kurs, /add, /alarm, /kauf …)
     import telegram_bot
     changed = telegram_bot.process(data, client)

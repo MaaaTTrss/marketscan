@@ -60,12 +60,42 @@ def new_id():
 
 
 # ---------------------------------------------------------------- Alarme
-def add_alarm(symbol, name, op, price):
+def add_alarm(symbol, name, op, price=None, pct=None, ref=None):
+    """Arten:
+       below/above  – Preis unter/über 'price'
+       drop/rise    – fällt/steigt um 'pct' ab dem aktuellen Kurs 'ref' (wird zu below/above umgerechnet)
+       move         – Tagesbewegung von mehr als ±pct
+       trail        – Nachzieh-Stopp: pct unter dem Hoch seit dem Setzen"""
+    note = None
+    if op in ("drop", "rise"):
+        price = ref * (1 - pct) if op == "drop" else ref * (1 + pct)
+        note = f"{'−' if op == 'drop' else '+'}{pct * 100:.0f} % ab {ref:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        op = "below" if op == "drop" else "above"
     d = load()
-    a = {"id": new_id(), "symbol": symbol, "name": name, "op": op, "price": float(price), "created": int(time.time())}
+    a = {"id": new_id(), "symbol": symbol, "name": name, "op": op, "created": int(time.time()),
+         "date": time.strftime("%Y-%m-%d")}
+    if price is not None:
+        a["price"] = float(price)
+    if pct is not None and op in ("move", "trail"):
+        a["pct"] = float(pct)
+    if note:
+        a["note"] = note
     d["alarms"].append(a)
     save(d)
     return a
+
+
+def alarm_text(a):
+    fmt = lambda v: f"{v:,.{0 if v >= 1000 else 2}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    if a["op"] == "below":
+        return f"fällt unter {fmt(a['price'])} $" + (f" ({a['note']})" if a.get("note") else "")
+    if a["op"] == "above":
+        return f"steigt über {fmt(a['price'])} $" + (f" ({a['note']})" if a.get("note") else "")
+    if a["op"] == "move":
+        return f"bewegt sich an einem Tag mehr als ±{a['pct'] * 100:.0f} %"
+    if a["op"] == "trail":
+        return f"Nachzieh-Stopp: {a['pct'] * 100:.0f} % unter dem Hoch" + (f" (Hoch {fmt(a['peak'])} $)" if a.get("peak") else "")
+    return a["op"]
 
 
 def remove_alarm(aid):
@@ -107,6 +137,34 @@ def positions(depot):
     return [p for p in pos.values() if p["qty"] > 1e-12]
 
 
+def lots(depot, symbol):
+    """Einzelne Käufe, die noch im Depot sind (Verkäufe ziehen die ältesten zuerst ab – FIFO).
+    Für die Krypto-Haltefrist: nach 1 Jahr sind Gewinne in Deutschland steuerfrei."""
+    from datetime import date, timedelta
+    open_lots = []
+    for t in sorted([t for t in depot if t["symbol"] == symbol], key=lambda t: t["date"]):
+        if t["qty"] >= 0:
+            open_lots.append({"id": t["id"], "date": t["date"], "qty": t["qty"], "price": t["price"]})
+        else:
+            rest = -t["qty"]
+            while rest > 1e-12 and open_lots:
+                take = min(rest, open_lots[0]["qty"])
+                open_lots[0]["qty"] -= take
+                rest -= take
+                if open_lots[0]["qty"] <= 1e-12:
+                    open_lots.pop(0)
+    today = date.today()
+    for lot in open_lots:
+        d = date.fromisoformat(lot["date"])
+        try:
+            free = d.replace(year=d.year + 1) + timedelta(days=1)
+        except ValueError:   # 29. Februar
+            free = d + timedelta(days=366)
+        lot["taxfree"] = free.isoformat()
+        lot["days_left"] = max(0, (free - today).days)
+    return open_lots
+
+
 def summary(depot, items):
     """Depot mit aktuellen Kursen bewerten. items = Werte aus dem Radar-Snapshot."""
     by = {a["symbol"]: a for a in items}
@@ -118,6 +176,8 @@ def summary(depot, items):
         val = p["qty"] * price if price is not None else None
         r = {**p, "avg": p["cost"] / p["qty"], "price": price, "value": val, "currency": a.get("currency", "USD"),
              "d1": a.get("d1"), "d7": a.get("d7"), "group": a.get("group")}
+        if a.get("group") == "crypto":
+            r["lots"] = lots(depot, p["symbol"])
         if val is not None:
             r["pl"] = val - p["cost"]
             r["pl_pct"] = val / p["cost"] - 1 if p["cost"] else None

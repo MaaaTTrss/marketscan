@@ -512,3 +512,36 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# ---------------------------------------------------------------- Krypto-Markt: Dominanz & Funding
+def crypto_market():
+    """Bitcoin-Dominanz (CoinGecko) und Funding-Rates der Perpetual-Futures (OKX, sonst Bybit).
+    Funding > 0: Long-Trader zahlen (viele wetten auf steigend, oft gehebelt).
+    Funding < 0: Short-Trader zahlen (Pessimismus – historisch eher Gegenindikator)."""
+    out = {}
+    try:
+        d = requests.get("https://api.coingecko.com/api/v3/global", headers=UA, timeout=15).json()["data"]
+        mp = d["market_cap_percentage"]
+        out.update({"btc_dom": mp.get("btc"), "eth_dom": mp.get("eth"),
+                    "alt_dom": 100 - (mp.get("btc") or 0) - (mp.get("eth") or 0),
+                    "mcap": d["total_market_cap"].get("usd"), "mcap_d1": d.get("market_cap_change_percentage_24h_usd")})
+    except Exception as e:
+        print("CoinGecko:", e)
+    funding = {}
+    for coin in ("BTC", "ETH"):
+        rate, src = None, None
+        try:
+            j = requests.get(f"https://www.okx.com/api/v5/public/funding-rate?instId={coin}-USDT-SWAP", timeout=10).json()
+            rate, src = float(j["data"][0]["fundingRate"]), "OKX"
+        except Exception:
+            try:
+                j = requests.get(f"https://api.bybit.com/v5/market/tickers?category=linear&symbol={coin}USDT", timeout=10).json()
+                rate, src = float(j["result"]["list"][0]["fundingRate"]), "Bybit"
+            except Exception:
+                pass
+        if rate is not None:
+            funding[coin] = {"rate": rate, "year": rate * 3 * 365, "src": src}   # alle 8 h -> pro Jahr
+    if funding:
+        out["funding"] = funding
+    return out or None

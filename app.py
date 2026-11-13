@@ -233,10 +233,10 @@ def get_market():
     ts, data = cache["market"]
     if data and time.time() - ts < MARKET_TTL:
         return data
-    with ThreadPoolExecutor(4) as ex:
-        f1, f2, f3, f4 = (ex.submit(radar.crypto_fng), ex.submit(radar.stock_fng),
-                          ex.submit(radar.shiller_cape), ex.submit(radar.btc_onchain))
-        cfng, sfng, cape, onchain = f1.result(), f2.result(), f3.result(), f4.result()
+    with ThreadPoolExecutor(5) as ex:
+        f1, f2, f3, f4, f5 = (ex.submit(radar.crypto_fng), ex.submit(radar.stock_fng),
+                              ex.submit(radar.shiller_cape), ex.submit(radar.btc_onchain), ex.submit(radar.crypto_market))
+        cfng, sfng, cape, onchain, cmkt = f1.result(), f2.result(), f3.result(), f4.result(), f5.result()
     btc = None
     if onchain is not None and len(onchain) > 1000:
         price, mvrv = onchain["PriceUSD"], onchain["CapMVRVCur"]
@@ -249,7 +249,7 @@ def get_market():
                "cycles": [{k: (str(v.date()) if k == "peak_date" else v) for k, v in c.items()}
                           for c in cycles],
                "mvrv_hist": [[d.strftime("%Y-%m-%d"), round(float(v), 3)] for d, v in mv.items()]}
-    data = {"crypto_fng": cfng, "stock_fng": sfng, "cape": cape, "btc": btc}
+    data = {"crypto_fng": cfng, "stock_fng": sfng, "cape": cape, "btc": btc, "crypto_market": cmkt}
     cache["market"] = (time.time(), data)
     return data
 
@@ -375,6 +375,25 @@ def index():
     return send_from_directory(app.static_folder, "index.html")
 
 
+def private_with_peaks(hist, items):
+    """Private Daten laden und für Nachzieh-Stopps das Hoch seit dem Setzen ergänzen."""
+    priv = private_store.load()
+    price = {a["symbol"]: a.get("price") for a in items}
+    for al in priv["alarms"]:
+        if al["op"] == "trail":
+            s = hist.get(al["symbol"])
+            vals = []
+            if s is not None:
+                part = s[s.index >= pd.Timestamp(al.get("date") or "2000-01-01")]
+                if len(part):
+                    vals.append(float(part.max()))
+            if price.get(al["symbol"]):
+                vals.append(price[al["symbol"]])
+            if vals:
+                al["peak"] = max(vals)
+    return priv
+
+
 def snapshot(force=False):
     with lock:
         if force:
@@ -402,15 +421,17 @@ def snapshot(force=False):
             item["earnings"] = earn.get(s)
         items.append(item)
     snap = {"updated": datetime.now().strftime("%H:%M:%S"), "items": items, "market": market}
+    snap["_private"] = private_with_peaks(hist, items)
     with alert_lock:
-        alerts.check(snap, private_store.load())
+        alerts.check(snap, snap["_private"])
     return snap
 
 
 @app.route("/api/data")
 def api_data():
     snap = snapshot(force=request.args.get("force") == "1")
-    snap["alerts"] = {"current": [c for c in alerts.conditions(snap, private_store.load()) if c["prio"] > 0],
+    priv = snap.pop("_private", None)
+    snap["alerts"] = {"current": [c for c in alerts.conditions(snap, priv) if c["prio"] > 0],
                       "log": alerts.log()[:30], "settings": alerts.settings()}
     return jsonify(snap)
 
@@ -430,6 +451,25 @@ def background_checker():
         time.sleep(CHECK_EVERY)
 
 
+# ---------------------------------------------------------------- Signal-Check (Trefferquote)
+sig_cache = {}
+
+
+@app.route("/api/signals")
+def api_signals():
+    import signal_check
+    wl = load_wl()
+    syms = [w["symbol"] for w in wl]
+    with lock:
+        hist = get_hist(syms)
+    hit = sig_cache.get("bt")
+    if not hit or time.time() - hit[0] > HIST_TTL or hit[2] != tuple(syms):
+        bt = signal_check.backtest(hist, {w["symbol"]: w["group"] for w in wl})
+        sig_cache["bt"] = (time.time(), bt, tuple(syms))
+    snap = snapshot()
+    return jsonify({"backtest": sig_cache["bt"][1], "live": signal_check.live(hist, snap["items"])})
+
+
 # ---------------------------------------------------------------- Depot & Preis-Alarme
 def _item(sym):
     return next((w for w in load_wl() if w["symbol"] == sym), None)
@@ -437,8 +477,12 @@ def _item(sym):
 
 @app.route("/api/private")
 def api_private():
-    d = private_store.load()
     snap = snapshot()
+    with lock:
+        hist = get_hist([w["symbol"] for w in load_wl()])
+    d = private_with_peaks(hist, snap["items"])
+    for al in d["alarms"]:
+        al["text"] = private_store.alarm_text(al)
     return jsonify({"alarms": d["alarms"], "depot": d["depot"],
                     "summary": private_store.summary(d["depot"], snap["items"])})
 
@@ -449,12 +493,20 @@ def api_alarm_add():
     it = _item(j.get("symbol"))
     if not it:
         return jsonify({"error": "Wert nicht in deiner Liste"}), 400
+    op = j.get("op") if j.get("op") in ("below", "above", "drop", "rise", "move", "trail") else "below"
     try:
-        price = float(str(j.get("price")).replace(",", "."))
+        val = float(str(j.get("price") or j.get("pct")).replace(",", ".").replace("%", ""))
     except ValueError:
-        return jsonify({"error": "Preis ungültig"}), 400
-    op = "above" if j.get("op") == "above" else "below"
-    a = private_store.add_alarm(it["symbol"], it["name"], op, price)
+        return jsonify({"error": "Zahl ungültig"}), 400
+    if op in ("below", "above"):
+        a = private_store.add_alarm(it["symbol"], it["name"], op, price=val)
+    else:
+        if not 0 < val < 100:
+            return jsonify({"error": "Prozent zwischen 1 und 99 angeben"}), 400
+        cur = next((x.get("price") for x in snapshot()["items"] if x["symbol"] == it["symbol"]), None)
+        if op in ("drop", "rise") and not cur:
+            return jsonify({"error": "Kein aktueller Kurs"}), 400
+        a = private_store.add_alarm(it["symbol"], it["name"], op, pct=val / 100, ref=cur)
     push_files(["private.enc"], "Preis-Alarm geändert")
     return jsonify(a)
 

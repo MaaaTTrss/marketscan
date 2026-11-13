@@ -161,6 +161,7 @@ dialog h3{font-size:17px;margin:0 0 4px}
 @keyframes coinspin{0%,80%{transform:rotateY(0)}90%{transform:rotateY(180deg)}100%{transform:rotateY(360deg)}}
 @media (prefers-reduced-motion:reduce){.tile .ic .ico-crypto{animation:none}}
 h2 .count{font-size:13px;color:var(--muted);font-weight:400;margin-left:6px}
+.card .kv{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:13px;padding:6px 0;border-bottom:1px solid var(--line)}
 .static .rm{display:none}.static .privonly{display:none}
 .chip.alarm{background:var(--mid-bg);color:var(--mid)}.k-alarm{color:var(--mid)}
 .form{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
@@ -288,6 +289,7 @@ function apiUrl(path) {
   if (u.pathname === "/api/data") return "data/data.json" + t;
   if (u.pathname === "/api/asset") return `data/asset/${sfn(p.get("symbol"))}.json` + t;
   if (u.pathname === "/api/news") return `data/news/${sfn(p.get("symbol"))}-${p.get("lang")}.json` + t;
+  if (u.pathname === "/api/signals") return "data/signals.json" + t;
   if (u.pathname === "/api/backtest") return `data/backtest/${sfn(p.get("symbol"))}.json` + t;
   return path;
 }
@@ -397,6 +399,29 @@ function fngCard(title, d, note) {
     <div class="gauge"><span style="left:${d.now}%"></span></div><div class="gscale"><span>Extreme Angst</span><span>Extreme Gier</span></div>
     <div class="mini"><span>Gestern <b>${d.d1}</b></span><span>Vor 1 Woche <b>${d.w1}</b></span><span>Vor 1 Monat <b>${d.m1}</b></span>${d.y1 != null ? `<span>Vor 1 Jahr <b>${d.y1}</b></span>` : ""}</div>
     ${d.hist ? spark(d.hist, 260, 40, "spark wide") : ""}<p class="note">${note}</p></div>`;
+}
+function cryptoMarketCards(cm) {
+  if (!cm) return `<div class="card"><h3>Krypto-Markt</h3><p class="muted">Gerade nicht abrufbar.</p></div>`;
+  let dom = "";
+  if (cm.btc_dom != null) {
+    const seg = [["Bitcoin", cm.btc_dom, "var(--c1)"], ["Ethereum", cm.eth_dom, "var(--c2)"], ["Altcoins", cm.alt_dom, "var(--muted)"]];
+    dom = `<div class="card viz"><h3>Bitcoin-Dominanz</h3>
+      <div class="big"><span class="kpi">${num(cm.btc_dom, 1)} %</span><span class="lbl">des gesamten Krypto-Markts</span></div>
+      <div style="display:flex;height:12px;border-radius:6px;overflow:hidden;gap:2px;margin:6px 0">${seg.map(([n, v, c]) => `<span title="${n}: ${num(v, 1)} %" style="width:${v}%;background:${c}"></span>`).join("")}</div>
+      <div class="lgd" style="margin:0">${seg.map(([n, v, c]) => `<span><i style="background:${c}"></i>${n} ${num(v, 1)} %</span>`).join("")}</div>
+      <p class="note">Steigt die Dominanz, fließt Geld eher in Bitcoin (vorsichtiger Markt). Fällt sie deutlich, läuft oft eine „Altcoin-Saison“.
+      Gesamtwert ${big(cm.mcap, "USD")}${cm.mcap_d1 != null ? `, 24 h <span class="${cm.mcap_d1 > 0 ? "up" : "down"}">${pct(cm.mcap_d1 / 100)}</span>` : ""}.</p></div>`;
+  }
+  let fund = "";
+  if (cm.funding) {
+    const row = (k, f) => { const c = f.rate >= 0.0005 ? "bad" : f.rate <= -0.0001 ? "good" : "mid";
+      return `<div class="kv"><span>${k}</span><span><span class="pill ${c}">${num(f.rate * 100, 4)} %</span> <span class="sub">≈ ${pct(f.year, 0)} pro Jahr</span></span></div>`; };
+    fund = `<div class="card"><h3>Funding-Rate (Futures) <span class="ev ev-w">Belege: schwach</span></h3>
+      ${Object.entries(cm.funding).map(([k, f]) => row(k, f)).join("")}
+      <p class="note">Gebühr, die Long- und Short-Trader alle 8 Stunden austauschen. <b>Hoch positiv</b> (ab ~0,05 %): viele wetten gehebelt auf steigende Kurse – Absturzrisiko steigt.
+      <b>Negativ</b>: viele wetten auf fallend – oft ein Gegenindikator. Quelle: ${esc(Object.values(cm.funding)[0].src)}.</p></div>`;
+  }
+  return dom + fund;
 }
 function capeCard(c) {
   if (!c) return `<div class="card z"><h3>Shiller-KGV (S&amp;P 500) <span class="tag">Zusatzinfo</span></h3><p class="muted">Gerade nicht abrufbar.</p></div>`;
@@ -545,12 +570,12 @@ function render() {
     const table = {crypto: cryptoTable, stock: stockTable, etf: etfTable}[grp];
     const empty = {crypto: "Noch keine Coins", stock: "Noch keine Aktien", etf: "Noch keine ETFs"}[grp] + " – oben suchen und hinzufügen.";
     app.innerHTML = `<section><h2>Auffällig in ${esc(title)}</h2><div class="card">${alertChips(al)}</div></section>
-      ${grp === "crypto" ? `<section><h2>Stimmung</h2><div class="grid3">${fngCrypto(m)}</div></section>` : ""}
+      ${grp === "crypto" ? `<section><h2>Stimmung &amp; Markt</h2><div class="grid3">${fngCrypto(m)}${cryptoMarketCards(m.crypto_market)}</div></section>` : ""}
       ${grp === "stock" ? `<section><h2>Stimmung &amp; Bewertung</h2><div class="grid3">${fngStock(m)}${capeCard(m.cape)}</div></section>` : ""}
       ${section(title + ` <span class="sub muted" style="font-weight:400">· Namen anklicken für die Einzelanalyse</span>`, list, table, empty)}
       ${grp === "crypto" ? `<section><h2>Bitcoin-Zyklus</h2>${btcSection(m.btc)}</section>` : ""}`;
   } else if (r.view === "vergleich") {
-    app.innerHTML = "";
+    renderSignals();
     renderBtSelect(r.arg);
   } else if (r.view === "wert") {
     renderDetail(r.arg);
@@ -1010,6 +1035,7 @@ async function renderDetail(sym) {
       <p class="note">${RANGES[chartRange] > 1100 ? "Logarithmische Skala – gleiche Abstände bedeuten gleiche prozentuale Veränderung." : "Mit der Maus über das Diagramm fahren für Details."}</p></div></section>
     <section><h2>Auffälligkeiten</h2><div class="card alerts"><div><h3>Gerade auffällig</h3>${alertChips(curA)}</div>
       <div><h3>Bisherige Meldungen</h3>${logA.length ? `<ul class="log">${logA.map(e => `<li><span class="t">${esc(e.time)}</span><span class="k-${e.kind}">${esc(e.text)}</span></li>`).join("")}</ul>` : `<span class="muted" style="font-size:12px">Noch keine.</span>`}</div></div></section>
+    <section><h2>💸 Sparplan-Rechner</h2><div class="card viz" id="spBox"></div></section>
     ${STATIC ? "" : `<section class="privonly"><h2>🔔 Preis-Alarm</h2><div class="card" id="alarmBox"><span class="muted">Lade …</span></div></section>`}
     ${profileCard(a)}
     ${a.symbol === "BTC-USD" ? `<section><h2>Bitcoin-Zyklus</h2>${btcSection(DATA.market.btc)}</section>` : ""}
@@ -1017,6 +1043,7 @@ async function renderDetail(sym) {
       <a class="btprimary" style="display:inline-block;padding:7px 14px;border-radius:8px;text-decoration:none" href="#/vergleich/${encodeURIComponent(sym)}">Strategie-Vergleich für ${esc(a.name)} starten →</a></div></section>`;
   app.querySelectorAll("[data-range]").forEach(b => b.onclick = () => { chartRange = b.dataset.range; renderDetail(sym); });
   drawPrice();
+  sparplan(a);
   if (!STATIC) alarmBox(a);
 }
 window.addEventListener("resize", () => { if (route().view === "wert") drawPrice(); });
@@ -1030,6 +1057,8 @@ const SOURCES = `<section><h2>Woher kommen die Daten?</h2><div class="card"><div
 <tr><td><b>Krypto Fear &amp; Greed</b></td><td>alternative.me</td><td>einmal täglich</td></tr>
 <tr><td><b>Aktien Fear &amp; Greed</b></td><td>CNN Business</td><td>täglich</td></tr>
 <tr><td><b>Shiller-KGV</b></td><td>multpl.com (Daten von Prof. Robert Shiller, Yale)</td><td>monatlich</td></tr>
+<tr><td><b>Bitcoin-Dominanz</b>, Krypto-Gesamtwert</td><td>CoinGecko (kostenlose Schnittstelle)</td><td>stündlich</td></tr>
+<tr><td><b>Funding-Rates</b> (BTC, ETH)</td><td>OKX, ersatzweise Bybit (öffentliche Börsen-Schnittstellen)</td><td>stündlich</td></tr>
 <tr><td><b>Bitcoin MVRV &amp; On-Chain-Kurs</b></td><td>Coin Metrics (kostenlose Community-Schnittstelle)</td><td>einmal täglich</td></tr>
 <tr><td><b>News</b></td><td>Google News (Schlagzeilen vieler Medien, nach Aktualität)</td><td>alle 15 Min.</td></tr>
 <tr><td><b>Strategie-Vergleich</b></td><td>Yahoo-Kursverlauf + alternative.me + Coin Metrics</td><td>bei jedem Test</td></tr>
@@ -1038,6 +1067,105 @@ const SOURCES = `<section><h2>Woher kommen die Daten?</h2><div class="card"><div
 <p class="note">Alle Quellen sind kostenlos und brauchen keine Anmeldung. Es sind keine offiziellen Börsen-Echtzeitdaten: Sie können verzögert sein,
 gelegentlich Lücken haben oder ausfallen (dann zeigt der Radar „gerade nicht abrufbar“). Für echte Kauf-Entscheidungen den Kurs immer auch beim eigenen Broker prüfen.
 ${STATIC ? "Diese Seite wird etwa alle 15 Minuten von GitHub (in der Cloud) mit denselben Quellen neu berechnet." : "Alles läuft lokal auf deinem Mac – nichts wird irgendwo hochgeladen."}</p></div></section>`;
+
+// ---------- Signal-Check & Spielgeld
+let SIGS = null, sigsAt = 0;
+async function renderSignals() {
+  const app = document.getElementById("app");
+  if (!SIGS) app.innerHTML = `<div class="loading">Prüfe die Signale der letzten 3 Jahre …</div>`;
+  if (!SIGS || Date.now() - sigsAt > 10 * 60e3) {
+    try { SIGS = await (await fetch(apiUrl("/api/signals"))).json(); sigsAt = Date.now(); } catch { app.innerHTML = `<div class="card muted">Signal-Check gerade nicht abrufbar.</div>`; return; }
+  }
+  if (route().view !== "vergleich") return;
+  const B = SIGS.backtest, L = SIGS.live, P = L.paper;
+  const p0 = v => v == null ? "–" : Math.round(v * 100) + " %";
+  const groups = Object.values(B.groups).map(G => {
+    const rows = G.rows.map(x => {
+      const few = x.n30 < 10;
+      // Vergleich mit "normal": gestiegen-Quote eines beliebigen Tages (bzw. gefallen-Quote bei Verkaufssignalen)
+      const base = x.dir > 0 ? G.base_up30 : 1 - G.base_up30;
+      const diff = x.hit30 == null ? null : x.hit30 - base;
+      const verdict = few ? `<span class="muted">zu wenig Fälle</span>` : diff > .08 ? `<b class="up">besser als Zufall</b>` : diff < -.08 ? `<b class="down">schlechter als Zufall</b>` : `<span class="muted">wie Zufall</span>`;
+      return `<tr><td><span class="k-${x.kind}">●</span> ${esc(x.label)}<div class="sub">${x.dir > 0 ? "Treffer = danach gestiegen" : "Treffer = danach gefallen"}</div></td>
+        <td class="num">${x.n}</td><td class="num">${p0(x.hit7)}</td><td class="num ${x.avg7 > 0 ? "up" : "down"}">${pct(x.avg7)}</td>
+        <td class="num"><b>${p0(x.hit30)}</b></td><td class="num ${x.avg30 > 0 ? "up" : "down"}">${pct(x.avg30)}</td><td>${verdict}</td></tr>`;
+    }).join("");
+    return `<div class="card scroll"><h3>${esc(G.name)} <span class="sub muted">· Zum Vergleich, ein ganz normaler Tag: 30 Tage später ${p0(G.base_up30)} gestiegen, Ø ${pct(G.base_avg30)}</span></h3>
+      <table class="data"><thead><tr><th>Signal</th><th class="num">Fälle</th><th class="num">Treffer 7 T</th><th class="num">Ø 7 T</th><th class="num">Treffer 30 T</th><th class="num">Ø 30 T</th><th>Urteil</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }).join("");
+  const pb = B.paper_backtest;
+  const trades = P.trades.map(t => `<tr><td>${esc(t.date)}</td><td><b>${esc(t.name)}</b></td><td>${t.open ? `offen bis ${esc(t.until)}` : "verkauft"}</td>
+      <td class="num ${t.ret > 0 ? "up" : "down"}">${pct(t.ret)}</td><td class="num ${t.pl > 0 ? "up" : "down"}">${money2(t.pl)}</td></tr>`).join("");
+  const liveRows = Object.values(L.stats).filter(x => x.n30 || x.n7).map(x => `<li><span>${esc(x.label)}</span><span>${x.n} Signale · Treffer 7 T: ${p0(x.hit7)} · 30 T: ${p0(x.hit30)}</span></li>`).join("");
+  app.innerHTML = `<section><h2>Wie gut sind die Signale wirklich?</h2>
+    <p class="muted" style="font-size:13px;margin:-4px 0 10px">Die Regeln von MarketScan rückwirkend auf die letzten ${B.years} Jahre deiner Werte angewendet: Was ist 7 und 30 Tage nach jedem Signal passiert?
+      „Besser als Zufall“ heißt: deutlich öfter richtig als an einem beliebigen Tag. Unter 10 Fällen ist das Ergebnis kaum aussagekräftig.</p>
+    ${groups}
+    <div class="card"><h3>🔴 Live seit ${esc(fmtDate(L.since))}</h3>
+      ${L.count ? `<ul class="cal">${liveRows || `<li><span class="muted">Noch nichts auswertbar – Ergebnisse gibt es 7 bzw. 30 Tage nach einem Signal.</span></li>`}</ul>` : `<p class="muted" style="margin:0">Ab jetzt wird jedes neue Signal gespeichert und 7 und 30 Tage später bewertet. Noch keine Signale seit dem Start.</p>`}
+    </div></section>
+    <section><h2>💰 Spielgeld-Depot: folgt jedem ★-Kaufsignal</h2>
+    <div class="grid3">
+      <div class="card"><h3>Regel</h3><p style="margin:0;font-size:13px">Bei jedem neuen <b>★ Überverkauft im Aufwärtstrend</b> werden virtuell <b>${money2(P.usd)}</b> gekauft und nach <b>${P.days} Tagen</b> wieder verkauft. Kein echtes Geld.</p></div>
+      <div class="card"><h3>Live seit ${esc(fmtDate(L.since))}</h3><div class="kpi ${P.pl > 0 ? "up" : P.pl < 0 ? "down" : ""}">${money2(P.pl)}</div><p class="note">${P.trades.length} Käufe, ${P.trades.filter(t => t.open).length} noch offen</p></div>
+      <div class="card"><h3>Hätte man das ${B.years} Jahre gemacht</h3><div class="kpi ${pb.pl > 0 ? "up" : "down"}">${money2(pb.pl)}</div><p class="note">${pb.trades} Käufe, davon ${pb.wins} mit Gewinn · Ø ${pct(pb.avg)} je Kauf</p></div></div>
+    ${trades ? `<div class="card scroll"><table class="data"><thead><tr><th>Kauf</th><th>Wert</th><th>Status</th><th class="num">Ergebnis</th><th class="num">Gewinn</th></tr></thead><tbody>${trades}</tbody></table></div>` : ""}
+    </section>`;
+}
+
+// ---------- Sparplan-Rechner: jeden Monat einen festen Betrag kaufen
+let spAmt = 100, spFrom = null;
+function sparplan(a) {
+  const box = document.getElementById("spBox"); if (!box || !ASSET?.series) return;
+  const S = ASSET.series, years = [...new Set(S.dates.map(d => +d.slice(0, 4)))];
+  const lastY = years[years.length - 1], firstY = years[0];
+  if (spFrom == null || spFrom < firstY) spFrom = Math.max(firstY, lastY - 5);
+  // Kauf am ersten Handelstag jedes Monats
+  let units = 0, paid = 0, lastM = "";
+  const pts = [];
+  S.dates.forEach((d, i) => {
+    const px = S.close[i]; if (px == null || +d.slice(0, 4) < spFrom) return;
+    if (d.slice(0, 7) !== lastM) { lastM = d.slice(0, 7); units += spAmt / px; paid += spAmt; pts.push({d, paid, value: units * px}); }
+  });
+  const nowV = units * a.price, gain = nowV - paid;
+  // Vergleich: alles am Anfang auf einmal
+  const firstPx = S.close[S.dates.findIndex(d => +d.slice(0, 4) >= spFrom)], lump = paid / firstPx * a.price;
+  pts.push({d: S.dates[S.dates.length - 1], paid, value: nowV});
+  box.innerHTML = `<div class="form"><span>Jeden Monat</span><input id="spAmt" class="n" inputmode="decimal" value="${spAmt}"><span>$ in ${esc(a.name)} seit</span>
+      <select id="spFrom">${years.slice(0, -1).map(y => `<option ${y === spFrom ? "selected" : ""}>${y}</option>`).join("")}</select></div>
+    <div class="grid3" style="margin-top:12px">
+      <div><div class="muted" style="font-size:12px">Eingezahlt</div><div class="kpi">${money2(paid)}</div><div class="sub">${pts.length - 1} Monate</div></div>
+      <div><div class="muted" style="font-size:12px">Wert heute</div><div class="kpi">${money2(nowV)}</div></div>
+      <div><div class="muted" style="font-size:12px">Gewinn / Verlust</div><div class="kpi ${gain >= 0 ? "up" : "down"}">${money2(gain)}<small>${pct(paid ? gain / paid : null)}</small></div></div></div>
+    <div class="lgd" style="margin:12px 0 0"><span><i style="background:var(--c1)"></i>Wert des Sparplans</span><span><i style="background:var(--muted)"></i>eingezahlt</span></div>
+    <div class="chartwrap" id="spChart"></div>
+    <p class="note">Gekauft wird am ersten Handelstag jedes Monats, ohne Gebühren und Steuern. Zum Vergleich: dieselben ${money2(paid)} auf einmal im Januar ${spFrom} angelegt wären heute ${money2(lump)} wert.
+      Vergangene Kurse sagen nichts über die Zukunft.</p>`;
+  document.getElementById("spAmt").onchange = e => { const v = parseFloat(String(e.target.value).replace(",", ".")); if (v > 0) { spAmt = v; sparplan(a); } };
+  document.getElementById("spFrom").onchange = e => { spFrom = +e.target.value; sparplan(a); };
+  // Diagramm: Wert vs. eingezahlt
+  const el = document.getElementById("spChart"), W = Math.max(320, el.clientWidth), H = 200, m = {l: 70, r: 12, t: 10, b: 22}, iw = W - m.l - m.r, ih = H - m.t - m.b;
+  const hi = Math.max(...pts.map(p => Math.max(p.value, p.paid))) * 1.05 || 1;
+  const x = k => m.l + k / Math.max(1, pts.length - 1) * iw, y = v => m.t + ih - v / hi * ih;
+  const line = key => pts.map((p, k) => `${k ? "L" : "M"}${x(k).toFixed(1)},${y(p[key]).toFixed(1)}`).join("");
+  const ticks = niceTicks(0, hi, 4).map(v => `<line x1="${m.l}" x2="${m.l + iw}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)"/><text x="${m.l - 8}" y="${y(v) + 4}" text-anchor="end" class="ax">${money(v)}</text>`).join("");
+  let xl = "", ly = ""; pts.forEach((p, k) => { const yy = p.d.slice(0, 4); if (yy !== ly && p.d.slice(5, 7) === "01") xl += `<text x="${x(k)}" y="${H - 5}" text-anchor="middle" class="ax">${yy}</text>`; ly = yy; });
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${ticks}${xl}
+    <path d="${line("paid")}" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <path d="${line("value")}" fill="none" stroke="var(--c1)" stroke-width="2"/>
+    <line id="spx" y1="${m.t}" y2="${m.t + ih}" stroke="var(--muted)" stroke-dasharray="3 3" style="display:none"/>
+    <rect x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="transparent" id="sphit"/></svg><div class="tip" id="sptip"></div>`;
+  const svg = el.querySelector("svg"), tip = el.querySelector("#sptip"), cx = el.querySelector("#spx");
+  el.querySelector("#sphit").onmousemove = ev => {
+    const r = svg.getBoundingClientRect(), px = (ev.clientX - r.left) * W / r.width;
+    const k = Math.max(0, Math.min(pts.length - 1, Math.round((px - m.l) / iw * (pts.length - 1)))), p = pts[k];
+    cx.setAttribute("x1", x(k)); cx.setAttribute("x2", x(k)); cx.style.display = "";
+    tip.innerHTML = `<div class="muted">${new Date(p.d).toLocaleDateString("de-DE", {month: "short", year: "numeric"})}</div>
+      <div><span class="sw" style="background:var(--c1)"></span>Wert: <b>${money2(p.value)}</b></div><div><span class="sw" style="background:var(--muted)"></span>Eingezahlt: <b>${money2(p.paid)}</b></div>`;
+    tip.style.display = "block"; const left = x(k) * r.width / W; tip.style.left = (left > r.width - 200 ? left - tip.offsetWidth - 12 : left + 12) + "px"; tip.style.top = "10px";
+  };
+  el.querySelector("#sphit").onmouseleave = () => { tip.style.display = "none"; cx.style.display = "none"; };
+}
 
 // ---------- Termine (Quartalszahlen)
 const WDS = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
@@ -1054,9 +1182,13 @@ function termineSection(items) {
 let PRIV = null;
 async function loadPriv() { PRIV = await (await fetch("/api/private")).json(); return PRIV; }
 const alarmHit = id => (DATA.alerts?.current || []).some(c => c.key === "alarm:" + id);
-const opTxt = op => op === "below" ? "fällt unter" : "steigt über";
+const ALARM_OPS = `<option value="below">Preis fällt unter</option><option value="above">Preis steigt über</option>
+  <option value="drop">fällt um … % (ab jetzt)</option><option value="rise">steigt um … % (ab jetzt)</option>
+  <option value="move">Tagesbewegung mehr als ± … %</option><option value="trail">Nachzieh-Stopp: … % unter Hoch</option>`;
+const alarmHint = op => ({below: "Preis in $", above: "Preis in $", drop: "z. B. 10 (%)", rise: "z. B. 10 (%)", move: "z. B. 5 (%)", trail: "z. B. 15 (%)"}[op]);
 function alarmLi(al, withName) {
-  return `<li><span>${withName ? `<b>${esc(al.name)}</b> ` : ""}${opTxt(al.op)} <b>${money(al.price)}</b>${alarmHit(al.id) ? ' <span class="hit">· ausgelöst</span>' : ""}</span>
+  const hit = (DATA.alerts?.current || []).some(c => c.key === "alarm:" + al.id || c.key.startsWith("alarm:" + al.id + ":"));
+  return `<li><span>${withName ? `<b>${esc(al.name)}</b> ` : ""}${esc(al.text || al.op)}${hit ? ' <span class="hit">· ausgelöst</span>' : ""}</span>
     <button class="rm" data-alarm-del="${al.id}" title="Löschen">×</button></li>`;
 }
 async function alarmBox(a) {
@@ -1064,10 +1196,12 @@ async function alarmBox(a) {
   await loadPriv();
   const mine = PRIV.alarms.filter(x => x.symbol === a.symbol);
   box.innerHTML = `<div class="form"><span>Melde dich, wenn ${esc(a.name)}</span>
-      <select id="alOp"><option value="below">unter</option><option value="above">über</option></select>
-      <input id="alPrice" class="n" inputmode="decimal" placeholder="Preis" value="${Math.round(a.price * 0.9 * 100) / 100}">
-      <span>${esc(a.currency || "USD")}</span><button class="btprimary" id="alAdd">Alarm setzen</button></div>
-    ${mine.length ? `<ul class="alist">${mine.map(x => alarmLi(x)).join("")}</ul>` : `<p class="note">Aktueller Kurs: ${money(a.price, a.currency)}. Die Meldung kommt aufs Handy (Telegram/ntfy), sobald der Preis erreicht ist.</p>`}`;
+      <select id="alOp">${ALARM_OPS}</select>
+      <input id="alPrice" class="n" inputmode="decimal" placeholder="Preis in $" value="${Math.round(a.price * 0.9 * 100) / 100}">
+      <button class="btprimary" id="alAdd">Alarm setzen</button></div>
+    ${mine.length ? `<ul class="alist">${mine.map(x => alarmLi(x)).join("")}</ul>` : `<p class="note">Aktueller Kurs: ${money(a.price, a.currency)}. Die Meldung kommt per Telegram, sobald der Alarm auslöst. Nachzieh-Stopp: meldet, wenn der Kurs um X % unter sein Hoch seit dem Setzen fällt – praktisch, um Gewinne abzusichern.</p>`}`;
+  const op = document.getElementById("alOp"), inp = document.getElementById("alPrice");
+  op.onchange = () => { inp.placeholder = alarmHint(op.value); inp.value = ["below", "above"].includes(op.value) ? Math.round(a.price * (op.value === "below" ? 0.9 : 1.1) * 100) / 100 : ({drop: 10, rise: 10, move: 5, trail: 15}[op.value]); };
   document.getElementById("alAdd").onclick = async () => {
     const r = await fetch("/api/alarms", {method: "POST", headers: {"Content-Type": "application/json"},
       body: JSON.stringify({symbol: a.symbol, op: document.getElementById("alOp").value, price: document.getElementById("alPrice").value})});
@@ -1106,6 +1240,12 @@ async function renderDepot() {
       <div class="card"><h3>Gewinn / Verlust gesamt</h3><div class="kpi ${cls(S.pl)}">${money2(S.pl)}<small>${pct(S.pl_pct)}</small></div><p class="note">Seit Kauf, ohne Gebühren und Steuern.</p></div></div>
     <div class="card scroll" style="margin-top:12px"><table class="data"><thead><tr><th>Wert</th><th class="num">Menge</th><th class="num">Ø Einstand</th><th class="num">Kurs</th><th class="num">Wert</th><th class="num">G/V</th><th class="num">G/V %</th><th class="num">Heute</th><th class="num">Anteil</th></tr></thead><tbody>${rows}</tbody></table></div>`
     : `<div class="card muted">Noch nichts eingetragen. Trag unten deinen ersten Kauf ein.</div>`}
+    ${(() => { const L = S.rows.flatMap(r => (r.lots || []).map(l => ({...l, name: r.name})));
+      if (!L.length) return "";
+      return `<div class="card"><h3>🧾 Krypto-Steuer-Uhr</h3><ul class="cal">${L.sort((a, b) => a.days_left - b.days_left).map(l => `<li>
+        <span><b>${esc(l.name)}</b> · ${num(l.qty, l.qty < 10 ? 4 : 2)} gekauft am ${esc(fmtDate(l.date))}</span>
+        <span>${l.days_left === 0 ? '<b class="up">✓ steuerfrei</b>' : `steuerfrei ab ${esc(fmtDate(l.taxfree))} · <b class="${l.days_left <= 30 ? "hit" : ""}">noch ${l.days_left} Tage</b>`}</span></li>`).join("")}</ul>
+        <p class="note">In Deutschland sind Gewinne aus Krypto nach mehr als einem Jahr Haltedauer steuerfrei (Verkäufe zählen die ältesten Käufe zuerst). 7 Tage vorher und am Tag selbst kommt eine Erinnerung. Keine Steuerberatung.</p></div>`; })()}
     <div class="card"><h3>Kauf oder Verkauf eintragen</h3><div class="form">
       <select id="tdSide"><option value="buy">Kauf</option><option value="sell">Verkauf</option></select>
       <select id="tdSym">${opts}</select>
@@ -1116,13 +1256,14 @@ async function renderDepot() {
       <p class="note">Preis in der Währung des Werts (meist US-Dollar). Werte, die nicht in der Liste sind, erst oben über die Suche hinzufügen.</p>
       ${trades ? `<h3 style="margin-top:14px">Alle Einträge</h3><ul class="alist">${trades}</ul>` : ""}</div></section>
     <section><h2>🔔 Preis-Alarme</h2><div class="card"><div class="form">
-      <select id="alSym">${opts}</select><select id="alOp2"><option value="below">fällt unter</option><option value="above">steigt über</option></select>
-      <input id="alPrice2" class="n" inputmode="decimal" placeholder="Preis"><button class="btprimary" id="alAdd2">Alarm setzen</button></div>
+      <select id="alSym">${opts}</select><select id="alOp2">${ALARM_OPS}</select>
+      <input id="alPrice2" class="n" inputmode="decimal" placeholder="Preis in $"><button class="btprimary" id="alAdd2">Alarm setzen</button></div>
       ${PRIV.alarms.length ? `<ul class="alist">${PRIV.alarms.map(x => alarmLi(x, true)).join("")}</ul>` : `<p class="note">Noch keine Alarme. Die Meldung kommt aufs Handy, sobald der Preis erreicht ist (Prüfung etwa alle 15 Minuten in der Cloud).</p>`}</div></section>
     <p class="note">🔒 Depot und Alarme werden verschlüsselt gespeichert und erscheinen nicht auf der öffentlichen Seite. Per Telegram geht auch: <code>/kauf</code>, <code>/verkauf</code>, <code>/depot</code>, <code>/alarm</code>.</p>`;
   const fill = (sel, inp) => { const a = DATA.items.find(x => x.symbol === document.getElementById(sel).value); if (a?.price) document.getElementById(inp).placeholder = "jetzt " + num(a.price, a.price >= 1000 ? 0 : 2); };
   document.getElementById("tdSym").onchange = () => fill("tdSym", "tdPrice"); fill("tdSym", "tdPrice");
   document.getElementById("alSym").onchange = () => fill("alSym", "alPrice2"); fill("alSym", "alPrice2");
+  document.getElementById("alOp2").onchange = e => { const v = e.target.value; if (["below", "above"].includes(v)) fill("alSym", "alPrice2"); else document.getElementById("alPrice2").placeholder = alarmHint(v); };
   document.getElementById("tdAdd").onclick = async () => {
     const sym = document.getElementById("tdSym").value, a = DATA.items.find(x => x.symbol === sym);
     const price = document.getElementById("tdPrice").value || (a?.price ?? "");

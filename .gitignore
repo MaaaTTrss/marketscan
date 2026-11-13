@@ -10,3 +10,4 @@ settings.json
 *.log
 .DS_Store
 report_state.json
+signals_log.json

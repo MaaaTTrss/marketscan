@@ -143,6 +143,34 @@ Nur Nachrichten aus deinem eigenen Chat werden beachtet.
 **Schlüssel in die Cloud bringen:** Doppelklick auf `Cloud-Schlüssel übertragen.command` (überträgt ntfy, Depot-Schlüssel
 und Telegram aus `.env` als GitHub-Secrets).
 
+### Wie gut sind die Signale? (Strategie-Vergleich)
+
+Oben im Reiter **Strategie-Vergleich**: Alle Regeln rückwirkend auf 3 Jahre deiner Werte angewendet – Treffer nach
+7 und 30 Tagen, verglichen mit einem beliebigen Tag („Zufall“). Dazu ein **Spielgeld-Depot**, das jedem ★-Kaufsignal
+mit virtuell 1.000 $ für 30 Tage folgt (live ab dem Start, plus Rückblick über 3 Jahre). Neue Signale werden in
+`signals_log.json` gespeichert und später bewertet.
+
+### Weitere Funktionen
+- **Krypto-Steuer-Uhr** im Depot: wann jeder Kauf nach 1 Jahr steuerfrei wird (FIFO), Erinnerung 7 Tage vorher.
+- **Alarm-Arten**: Preis unter/über · fällt/steigt um X % · Tagesbewegung ±X % · Nachzieh-Stopp X % unter Hoch.
+  Telegram: `/alarm btc -10%`, `/alarm nvidia ±5%`, `/stopp btc 15%`.
+- **Krypto-Markt**: Bitcoin-Dominanz (CoinGecko) und Funding-Rates (OKX/Bybit) auf der Krypto-Seite, Meldung bei
+  stark positivem oder negativem Funding. (ETF-Zuflüsse: keine freie, stabile Quelle gefunden.)
+- **Sparplan-Rechner** auf jeder Einzelseite.
+
+### Schnelle Telegram-Antworten (optional, ~1 Minute statt bis zu 15)
+
+Braucht ein kostenloses Cloudflare-Konto. Ablauf: Telegram → Cloudflare-Worker → startet GitHub-Lauf → Antwort.
+1. Auf cloudflare.com kostenlos registrieren → **Workers & Pages** → **Create** → „Hello World“-Worker anlegen →
+   **Edit code** → Inhalt von `cloudflare/worker.js` einfügen → **Deploy**. Die Adresse (…workers.dev) notieren.
+2. Auf GitHub einen Zugriffsschlüssel erstellen: Settings → Developer settings → Fine-grained tokens → Generate:
+   nur Repository *marketscan*, Recht **Contents: Read and write**.
+3. Im Worker unter Settings → Variables and Secrets anlegen: `TELEGRAM_BOT_TOKEN`, `CHAT_ID`, `GITHUB_TOKEN`,
+   `WEBHOOK_SECRET` (selbst ausgedacht, nur Buchstaben/Zahlen), `GITHUB_REPO` = `MaaaTTrss/marketscan`.
+4. Telegram sagen, wohin es Nachrichten schicken soll – im Browser öffnen:
+   `https://api.telegram.org/bot<TOKEN>/setWebhook?url=<WORKER-ADRESSE>&secret_token=<WEBHOOK_SECRET>`
+Rückgängig: `https://api.telegram.org/bot<TOKEN>/deleteWebhook` – dann antwortet wieder der 15-Minuten-Lauf.
+
 ### Alternativ: Telegram
 
 Im Radar bei „Auffälligkeiten“ auf **📱 Handy einrichten** klicken und den 3 Schritten folgen

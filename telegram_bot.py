@@ -29,6 +29,9 @@ HELP = """<b>📡 MarketScan – Befehle</b>
 <b>Preis-Alarme</b>
 /alarm btc &lt; 70000 – meldet, wenn BTC unter 70.000 fällt
 /alarm nvidia &gt; 200 – meldet, wenn Nvidia über 200 steigt
+/alarm btc -10% – meldet, wenn BTC ab jetzt 10 % fällt
+/alarm nvidia ±5% – meldet Tagesbewegungen über 5 %
+/stopp btc 15% – Nachzieh-Stopp: 15 % unter dem Hoch
 /alarme – alle Alarme · /alarmweg 2 – Alarm Nr. 2 löschen
 
 <b>Depot</b>
@@ -116,10 +119,16 @@ def depot_text(data):
         return "💼 Dein Depot ist noch leer. Eintragen mit z. B. <code>/kauf btc 0,05 70000</code>"
     rows = [f"{r['name'][:11]:<11} {fmt(r['value']):>9} {alerts.pct(r['pl_pct']) if r.get('pl_pct') is not None else '':>8}"
             for r in S["rows"]]
+    tax = [(r["name"], l) for r in S["rows"] for l in r.get("lots", [])]
+    taxline = ""
+    if tax:
+        nxt = min(tax, key=lambda x: x[1]["days_left"])
+        taxline = (f"\n🧾 Nächster steuerfreier Kauf: {h(nxt[0])} "
+                   + ("✓ schon steuerfrei" if nxt[1]["days_left"] == 0 else f"in {nxt[1]['days_left']} Tagen ({nxt[1]['taxfree'][8:10]}.{nxt[1]['taxfree'][5:7]}.)"))
     return (f"💼 <b>Depot</b>: {fmt(S['value'])} $\n"
             f"Heute {'+' if S['day'] >= 0 else '−'}{fmt(abs(S['day']))} $ ({alerts.pct(S['day_pct']) if S['day_pct'] is not None else '–'})\n"
             f"Gesamt {'+' if S['pl'] >= 0 else '−'}{fmt(abs(S['pl']))} $ ({alerts.pct(S['pl_pct']) if S['pl_pct'] is not None else '–'})\n"
-            f"<pre>{h(chr(10).join(rows))}</pre>")
+            f"<pre>{h(chr(10).join(rows))}</pre>" + taxline)
 
 
 def alarme_text():
@@ -127,7 +136,7 @@ def alarme_text():
     if not al:
         return "🔔 Keine Preis-Alarme. Setzen mit z. B. <code>/alarm btc &lt; 70000</code>"
     return "🔔 <b>Preis-Alarme</b>\n" + "\n".join(
-        f"{i}. {alerts._h(a['name'])} {'unter' if a['op'] == 'below' else 'über'} {fmt(a['price'])} $" for i, a in enumerate(al, 1))
+        f"{i}. {alerts._h(a['name'])} {alerts._h(private_store.alarm_text(a))}" for i, a in enumerate(al, 1))
 
 
 def handle(text, data, client, changed):
@@ -165,8 +174,32 @@ def handle(text, data, client, changed):
         changed["watchlist"] = True
         return f"🗑 {alerts._h(a['name'])} entfernt."
 
-    if cmd in ("alarm", "alarme", "alarmweg", "kauf", "verkauf", "depot") and not private_store.available():
+    if cmd in ("alarm", "alarme", "alarmweg", "kauf", "verkauf", "depot", "stopp", "stop", "trail") and not private_store.available():
         return "🔒 Depot und Alarme sind in der Cloud noch nicht eingerichtet (Schlüssel fehlt)."
+    if cmd == "alarm" and "%" in arg:
+        # /alarm btc -10%  ·  /alarm btc +10%  ·  /alarm btc ±5%  (bzw. "tag 5%")
+        m = re.match(r"(.+?)\s+(tag\s*|±|\+/-|-|\+)?\s*([\d.,]+)\s*%\s*$", arg, re.I)
+        if not m:
+            return "So geht's: <code>/alarm btc -10%</code>, <code>/alarm btc +10%</code> oder <code>/alarm btc ±5%</code> (Tagesbewegung)"
+        a = find(m.group(1), items)
+        if not a:
+            return f"„{alerts._h(m.group(1))}“ ist nicht in deiner Liste."
+        sign, p = (m.group(2) or "").strip().lower(), num(m.group(3)) / 100
+        op = "move" if sign in ("±", "+/-", "tag") else "rise" if sign == "+" else "drop"
+        al = private_store.add_alarm(a["symbol"], a["name"], op, pct=p, ref=a.get("price"))
+        changed["private"] = True
+        return f"🔔 Alarm gesetzt: <b>{alerts._h(a['name'])}</b> {alerts._h(private_store.alarm_text(al))}"
+    if cmd in ("stopp", "stop", "trail"):
+        m = re.match(r"(.+?)\s+([\d.,]+)\s*%?\s*$", arg)
+        if not m:
+            return "So geht's: <code>/stopp btc 15%</code> – meldet, wenn BTC 15 % unter sein Hoch (ab jetzt) fällt."
+        a = find(m.group(1), items)
+        if not a:
+            return f"„{alerts._h(m.group(1))}“ ist nicht in deiner Liste."
+        al = private_store.add_alarm(a["symbol"], a["name"], "trail", pct=num(m.group(2)) / 100)
+        changed["private"] = True
+        return (f"🛡 Nachzieh-Stopp gesetzt: <b>{alerts._h(a['name'])}</b> – Meldung, wenn der Kurs {num(m.group(2)):.0f} % "
+                f"unter sein Hoch seit heute fällt (jetzt {fmt(a.get('price'))} $).")
     if cmd == "alarm":
         m = re.match(r"(.+?)\s*(<|>|unter|über|ueber)?\s*([\d.,]+k?)\s*$", arg, re.I)
         if not m:
@@ -216,8 +249,22 @@ def handle(text, data, client, changed):
     return "Unbekannter Befehl. /hilfe zeigt alle Befehle."
 
 
+def handle_update(u, data, client, changed):
+    """Eine Telegram-Nachricht beantworten (nur aus deinem eigenen Chat)."""
+    chat = alerts.telegram_config()[1]
+    msg = u.get("message") or {}
+    if str(msg.get("chat", {}).get("id")) != str(chat) or not msg.get("text", "").startswith("/"):
+        return
+    try:
+        reply = handle(msg["text"], data, client, changed)
+    except Exception as e:
+        reply = f"⚠️ Fehler: {alerts._h(str(e))}"
+    print("Telegram-Befehl:", msg["text"].split()[0])
+    alerts.send_telegram(reply, button=False)
+
+
 def process(data, client):
-    """Neue Nachrichten holen, beantworten. Gibt zurück, was sich geändert hat."""
+    """Neue Nachrichten holen (alle ~15 Min.) und beantworten. Gibt zurück, was sich geändert hat."""
     changed = {"watchlist": False, "private": False, "report": False}
     token, chat = alerts.telegram_config()
     if not (token and chat):
@@ -225,23 +272,36 @@ def process(data, client):
     try:
         updates = alerts.telegram_call("getUpdates", token=token, timeout=0, allowed_updates=["message"])
     except Exception as e:
-        print("Telegram: Nachrichten abrufen fehlgeschlagen:", e)
+        if "webhook" not in str(e).lower():   # mit Schnell-Antworten (Webhook) kommen Nachrichten direkt
+            print("Telegram: Nachrichten abrufen fehlgeschlagen:", e)
         return changed
     last = None
     for u in updates:
         last = u["update_id"]
-        msg = u.get("message") or {}
-        if str(msg.get("chat", {}).get("id")) != str(chat) or not msg.get("text", "").startswith("/"):
-            continue   # nur deine eigenen Befehle
-        try:
-            reply = handle(msg["text"], data, client, changed)
-        except Exception as e:
-            reply = f"⚠️ Fehler: {alerts._h(str(e))}"
-        print("Telegram-Befehl:", msg["text"].split()[0])
-        alerts.send_telegram(reply, button=False)
+        handle_update(u, data, client, changed)
     if last is not None:   # als gelesen markieren
         try:
             alerts.telegram_call("getUpdates", token=token, offset=last + 1, timeout=0)
         except Exception:
             pass
     return changed
+
+
+if __name__ == "__main__":
+    # Schnell-Antwort: von GitHub gestartet, sobald der Cloudflare-Worker eine Nachricht weiterreicht
+    import json
+    import os
+    os.environ.setdefault("RADAR_NO_BROWSER", "1")
+    import app
+    ev = json.load(open(os.environ["GITHUB_EVENT_PATH"]))
+    update = (ev.get("client_payload") or {}).get("update") or {}
+    client = app.app.test_client()
+    data = client.get("/api/data").get_json()
+    changed = {"watchlist": False, "private": False, "report": False}
+    handle_update(update, data, client, changed)
+    if changed["report"]:
+        os.environ["FORCE_REPORT"] = "1"
+        import build_static
+        priv = build_static.private_store.load()
+        build_static.maybe_send_reports(data, build_static.datetime.now(),
+                                        build_static.private_store.summary(priv["depot"], data["items"]), force=True)

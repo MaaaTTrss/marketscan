@@ -49,8 +49,8 @@ def conditions(snapshot, private=None):
     private = {"alarms": [...]} (Preis-Alarme, nur am Mac / in der Cloud mit Schlüssel)"""
     out = []
 
-    def add(key, sym, name, kind, text, prio):
-        out.append({"key": key, "symbol": sym, "name": name, "kind": kind, "text": text, "prio": prio})
+    def add(key, sym, name, kind, text, prio, cat=None):
+        out.append({"key": key, "symbol": sym, "name": name, "kind": kind, "text": text, "prio": prio, "cat": cat})
 
     for a in snapshot["items"]:
         if a.get("error") or a.get("price") is None:
@@ -62,18 +62,18 @@ def conditions(snapshot, private=None):
             # als im Abwärtstrend (dort fällt es oft einfach weiter).
             if r < RSI_LOW:
                 if tr == "auf":
-                    add(f"{s}:rsi_low", s, n, "good", f"★ RSI {r:.0f} – überverkauft im Aufwärtstrend", 1)
+                    add(f"{s}:rsi_low", s, n, "good", f"★ RSI {r:.0f} – überverkauft im Aufwärtstrend", 1, "good_star")
                 elif tr == "ab":
-                    add(f"{s}:rsi_low", s, n, "info", f"RSI {r:.0f} – überverkauft, aber Abwärtstrend", 3)
+                    add(f"{s}:rsi_low", s, n, "info", f"RSI {r:.0f} – überverkauft, aber Abwärtstrend", 3, "low_down")
                 else:
-                    add(f"{s}:rsi_low", s, n, "good", f"RSI {r:.0f} – überverkauft", 2)
+                    add(f"{s}:rsi_low", s, n, "good", f"RSI {r:.0f} – überverkauft", 2, "good")
             elif r > RSI_HIGH:
                 if tr == "ab":
-                    add(f"{s}:rsi_high", s, n, "bad", f"★ RSI {r:.0f} – überkauft im Abwärtstrend", 1)
+                    add(f"{s}:rsi_high", s, n, "bad", f"★ RSI {r:.0f} – überkauft im Abwärtstrend", 1, "bad_star")
                 elif tr == "auf":
-                    add(f"{s}:rsi_high", s, n, "info", f"RSI {r:.0f} – überkauft, Aufwärtstrend läuft", 3)
+                    add(f"{s}:rsi_high", s, n, "info", f"RSI {r:.0f} – überkauft, Aufwärtstrend läuft", 3, "high_up")
                 else:
-                    add(f"{s}:rsi_high", s, n, "bad", f"RSI {r:.0f} – überkauft", 2)
+                    add(f"{s}:rsi_high", s, n, "bad", f"RSI {r:.0f} – überkauft", 2, "bad")
         if a.get("earnings"):
             try:
                 ed = datetime.strptime(a["earnings"], "%Y-%m-%d").date()
@@ -84,9 +84,9 @@ def conditions(snapshot, private=None):
             except ValueError:
                 pass
         if a.get("trend") == "auf":
-            add(f"{s}:trend_auf", s, n, "good", "Trendwechsel: jetzt Aufwärts", 0)
+            add(f"{s}:trend_auf", s, n, "good", "Trendwechsel: jetzt Aufwärts", 0, "trend_up")
         elif a.get("trend") == "ab":
-            add(f"{s}:trend_ab", s, n, "bad", "Trendwechsel: jetzt Abwärts", 0)
+            add(f"{s}:trend_ab", s, n, "bad", "Trendwechsel: jetzt Abwärts", 0, "trend_down")
         d1, lim = a.get("d1"), DAY_MOVE.get(g, 0.05)
         if d1 is not None and abs(d1) >= lim:
             add(f"{s}:move_{'up' if d1 > 0 else 'down'}", s, n, "info",
@@ -106,6 +106,12 @@ def conditions(snapshot, private=None):
             add(f"{key}:low", "", f"{label}-Stimmung", "good", f"Extreme Angst ({f['now']})", 3)
         elif f and f["now"] >= FNG_HIGH:
             add(f"{key}:high", "", f"{label}-Stimmung", "bad", f"Extreme Gier ({f['now']})", 3)
+    cm = (m.get("crypto_market") or {}).get("funding", {}).get("BTC")
+    if cm:
+        if cm["rate"] >= 0.0005:
+            add("crypto:funding_high", "BTC-USD", "Bitcoin-Futures", "bad", f"Funding sehr hoch ({cm['rate'] * 100:.3f} %) – Markt überhebelt", 2)
+        elif cm["rate"] <= -0.0001:
+            add("crypto:funding_neg", "BTC-USD", "Bitcoin-Futures", "good", f"Funding negativ ({cm['rate'] * 100:.3f} %) – viele wetten auf fallend", 3)
     b = m.get("btc")
     if b:
         if b["mvrv"] < 1:
@@ -116,17 +122,43 @@ def conditions(snapshot, private=None):
             add("btc:mayer_low", "BTC-USD", "Bitcoin", "good", f"Mayer-Multiple {b['mayer']:.2f} – günstig", 2)
         elif b["mayer"] > 2.4:
             add("btc:mayer_high", "BTC-USD", "Bitcoin", "bad", f"Mayer-Multiple {b['mayer']:.2f} – überhitzt", 2)
+    # Krypto-Steuer-Uhr: Erinnerung 7 Tage vorher und am Tag, ab dem ein Kauf steuerfrei ist
+    if private and private.get("depot"):
+        import private_store
+        groups = {a["symbol"]: a.get("group") for a in snapshot["items"]}
+        for sym in {t["symbol"] for t in private["depot"]}:
+            if groups.get(sym) != "crypto":
+                continue
+            for lot in private_store.lots(private["depot"], sym):
+                nm = next((t["name"] for t in private["depot"] if t["symbol"] == sym), sym)
+                when = f"{lot['taxfree'][8:10]}.{lot['taxfree'][5:7]}."
+                if lot["days_left"] == 0:
+                    add(f"tax0:{lot['id']}", sym, nm, "alarm", f"Kauf vom {lot['date'][8:10]}.{lot['date'][5:7]}. ist ab heute steuerfrei (1 Jahr gehalten)", 1)
+                elif lot["days_left"] <= 7:
+                    add(f"tax7:{lot['id']}", sym, nm, "alarm", f"Kauf vom {lot['date'][8:10]}.{lot['date'][5:7]}. wird am {when} steuerfrei – noch {lot['days_left']} Tage halten", 1)
+
     # Preis-Alarme
     prices = {a["symbol"]: a for a in snapshot["items"] if a.get("price") is not None}
     for al in (private or {}).get("alarms", []):
         a = prices.get(al["symbol"])
         if not a:
             continue
-        hit = a["price"] <= al["price"] if al["op"] == "below" else a["price"] >= al["price"]
-        if hit:
-            word = "unter" if al["op"] == "below" else "über"
-            add(f"alarm:{al['id']}", al["symbol"], al["name"], "alarm",
-                f"Preis-Alarm: {word} {fmt_num(al['price'])} $ (jetzt {fmt_num(a['price'])} $)", 1)
+        op = al["op"]
+        if op in ("below", "above"):
+            hit = a["price"] <= al["price"] if op == "below" else a["price"] >= al["price"]
+            if hit:
+                word = "unter" if op == "below" else "über"
+                add(f"alarm:{al['id']}", al["symbol"], al["name"], "alarm",
+                    f"Preis-Alarm: {word} {fmt_num(al['price'])} $ (jetzt {fmt_num(a['price'])} $)", 1)
+        elif op == "move" and a.get("d1") is not None and abs(a["d1"]) >= al["pct"]:
+            today = datetime.now().strftime("%Y-%m-%d")   # darf jeden Tag neu auslösen
+            add(f"alarm:{al['id']}:{today}", al["symbol"], al["name"], "alarm",
+                f"Tagesbewegung {pct(a['d1'])} (Alarm ab ±{al['pct'] * 100:.0f} %)", 1)
+        elif op == "trail" and al.get("peak"):
+            stop = al["peak"] * (1 - al["pct"])
+            if a["price"] <= stop:
+                add(f"alarm:{al['id']}", al["symbol"], al["name"], "alarm",
+                    f"Nachzieh-Stopp: {al['pct'] * 100:.0f} % unter dem Hoch von {fmt_num(al['peak'])} $ (jetzt {fmt_num(a['price'])} $)", 1)
     out.sort(key=lambda c: -c["prio"])
     return out
 
@@ -170,8 +202,15 @@ def check(snapshot, private=None):
     prev = set(state.get("active", []))
     # Neu hinzugefügte Werte nicht sofort mit allen Zuständen melden
     new = [c for c in conds if c["key"] not in prev and not quiet(c["key"])
-           and (c["symbol"] in known or c["key"].startswith(("btc:", "alarm:")))]
+           and (c["symbol"] in known or c["key"].startswith(("btc:", "alarm:", "crypto:")))]
     _save(STATE_FILE, {"active": sorted(keys), "symbols": symbols})
+    try:
+        import signal_check
+        fresh = [c for c in conds if c["key"] not in prev and c.get("cat") and c["symbol"] in known]
+        if fresh:
+            signal_check.record(fresh, snapshot["items"])
+    except Exception as e:
+        print("Signal-Verlauf:", e)
     if not new:
         return []
     now = datetime.now().strftime("%d.%m. %H:%M")
