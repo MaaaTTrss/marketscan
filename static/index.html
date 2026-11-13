@@ -381,7 +381,7 @@ function etfTable(items) {
 // ---------- Marktstimmung & Bitcoin-Zyklus
 function fngCard(title, d, note) {
   if (!d) return `<div class="card"><h3>${title}</h3><p class="muted">Gerade nicht abrufbar.</p></div>`;
-  const c = d.now <= 25 ? "good" : d.now >= 75 ? "bad" : "mid";
+  const c = d.now <= 25 ? "bad" : d.now >= 75 ? "good" : "mid";   // Angst = rot, Gier = grün
   const label = d.label.charAt(0).toUpperCase() + d.label.slice(1);
   return `<div class="card"><h3>${title}</h3>
     <div class="big"><span class="pill ${c} lg">${d.now}</span><span class="lbl">${esc(label)}</span></div>
@@ -886,7 +886,7 @@ function detailSignals(a) {
     out.push(sigCard("Quartalszahlen", fmtDate(it.earnings), dd <= 7 ? "mid" : "", `${dd === 0 ? "Heute" : dd === 1 ? "Morgen" : `In ${dd} Tagen`}. Rund um die Zahlen schwankt der Kurs oft stark – manchmal 5–10 % an einem Tag.`));
   }
   if (a.group === "crypto" && DATA.market.crypto_fng) {
-    const f = DATA.market.crypto_fng, c = f.now <= 25 ? "good" : f.now >= 75 ? "bad" : "mid";
+    const f = DATA.market.crypto_fng, c = f.now <= 25 ? "bad" : f.now >= 75 ? "good" : "mid";
     out.push(sigCard("Krypto-Stimmung", f.now, c, `Fear &amp; Greed: ${esc(f.label)}. Gilt für den ganzen Kryptomarkt.`, EV.w));
   }
   return `<div class="sigs">${out.join("")}</div>`;

@@ -55,12 +55,12 @@ def card(ax, x, y, w, h):
 
 
 def gauge(ax, cx, cy, r, value, title, label, prev, prev_label="Vortag"):
-    # Skala 0..100 als Halbkreis (oben), links grün (Angst = eher Kaufgelegenheit), rechts rot (Gier).
+    # Skala 0..100 als Halbkreis (oben), links rot (Angst), rechts grün (Gier).
     # Achtung: y-Achse zeigt nach unten, darum laufen die Winkel 180 -> 360.
     steps = 60
     for i in range(steps):
         t0, t1 = i / steps, (i + 1) / steps
-        col = mix(GOOD, "#a16207", t0 * 2) if t0 < 0.5 else mix("#a16207", BAD, (t0 - 0.5) * 2)
+        col = mix(BAD, "#a16207", t0 * 2) if t0 < 0.5 else mix("#a16207", GOOD, (t0 - 0.5) * 2)
         ax.add_patch(Wedge((cx, cy), r, 180 + t0 * 180, 180 + t1 * 180 + 0.4, width=r * 0.2, fc=col, ec="none"))
     ax.text(cx, cy - r - 0.1, title, ha="center", va="bottom", color=MUTED, fontsize=8.5)
     if value is not None:
