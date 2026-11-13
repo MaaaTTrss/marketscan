@@ -3,7 +3,7 @@
 # Doppelklick genügt. Die Werte werden nicht angezeigt.
 cd "$(dirname "$0")"
 GH="$HOME/.local/bin/gh"
-REPO="MaaaTTrss/markt-radar"
+REPO="MaaaTTrss/marketscan"
 
 setsecret () {   # $1 = Name in .env, $2 = Name auf GitHub
   local v
