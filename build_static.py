@@ -51,7 +51,7 @@ def get(client, url):
 
 
 # ---------------------------------------------------------------- Morgenbericht
-REPORT_HOUR = 8                                      # ab dieser Uhrzeit (deutsche Zeit) einmal täglich
+REPORT_HOUR = 6                                      # ab dieser Uhrzeit (deutsche Zeit) einmal täglich
 REPORT_STATE = os.path.join(BASE, "report_state.json")
 FNG_DE = {"extreme fear": "extreme Angst", "fear": "Angst", "neutral": "neutral", "greed": "Gier", "extreme greed": "extreme Gier"}
 

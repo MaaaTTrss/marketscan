@@ -41,6 +41,13 @@ def pct(v):
     return f"{v * 100:+.1f} %".replace(".", ",").replace("-", "−")
 
 
+def fmt_price(v):
+    if v is None:
+        return ""
+    d = 0 if v >= 1000 else 2 if v >= 1 else 4
+    return f"{v:,.{d}f}".replace(",", "X").replace(".", ",").replace("X", ".") + " $"
+
+
 def card(ax, x, y, w, h):
     ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0,rounding_size=0.12",
                                 fc=CARD, ec=LINE, lw=0.8))
@@ -72,13 +79,13 @@ def render(data, now, path):
     infos = [c for c in cur if c["kind"] == "info"]
 
     cols = 3
-    tile_h, gap = 0.62, 0.08
+    tile_h, gap = 0.8, 0.08
     groups = [(k, t, [a for a in items if a.get("group") == k]) for k, t in GROUPS]
     groups = [g for g in groups if g[2]]
     heat_h = sum(0.34 + math.ceil(len(g[2]) / cols) * (tile_h + gap) for g in groups) + 0.2
-    sig_h = 0.5 + max(1, len(sig)) * 0.34 + (0.34 if infos else 0) + 0.15
+    sig_h = 0.85 + max(1, len(sig)) * 0.34 + (0.34 if infos else 0) + 0.15
     btc = m.get("btc") or {}
-    btc_h = 0.95 if btc.get("mvrv") is not None else 0
+    btc_h = 1.6 if btc.get("mvrv") is not None else 0
     H = 1.05 + 2.05 + heat_h + sig_h + btc_h + 0.55
 
     fig = plt.figure(figsize=(W, H), dpi=200, facecolor=BG)
@@ -128,6 +135,7 @@ def render(data, now, path):
                                         fc=col, ec=BG, lw=1.5))
             name = a["name"] if len(a["name"]) <= 14 else a["name"][:13] + "…"
             ax.text(x0 + 0.1, y0 + 0.1, name, color=FG, fontsize=7.8, fontweight="bold", va="top")
+            ax.text(x0 + 0.1, y0 + 0.3, fmt_price(a.get("price")), color=FG, alpha=0.8, fontsize=7.6, va="top")
             ax.text(x0 + 0.1, y0 + tile_h - 0.08, "–" if d is None else pct(d), color=FG, fontsize=10.5,
                     fontweight="bold", va="bottom")
             if a.get("rsi") is not None:
@@ -139,7 +147,11 @@ def render(data, now, path):
     # Signale
     card(ax, PAD, y, W - 2 * PAD, sig_h - 0.15)
     ax.text(PAD + 0.18, y + 0.14, "Signale", color=FG, fontsize=10, fontweight="bold", va="top")
-    yy = y + 0.52
+    ax.text(PAD + 0.18, y + 0.42, "überverkauft = stark gefallen (RSI unter 30) – oft folgt eine Gegenbewegung nach oben",
+            color=MUTED, fontsize=6.5, va="top")
+    ax.text(PAD + 0.18, y + 0.58, "überkauft = stark gestiegen (RSI über 70) – Rücksetzer werden wahrscheinlicher",
+            color=MUTED, fontsize=6.5, va="top")
+    yy = y + 0.92
     if not sig:
         ax.text(PAD + 0.18, yy, "Gerade keine Kauf- oder Vorsicht-Signale.", color=MUTED, fontsize=8.5, va="center")
         yy += 0.34
@@ -159,17 +171,25 @@ def render(data, now, path):
     if btc_h:
         card(ax, PAD, y, W - 2 * PAD, btc_h - 0.15)
         ax.text(PAD + 0.18, y + 0.14, "Bitcoin-Zyklus", color=FG, fontsize=10, fontweight="bold", va="top")
-        vals = [("MVRV", btc.get("mvrv"), 1, 3), ("Mayer", btc.get("mayer"), 0.8, 2.4)]
-        for i, (lab, v, lo, hi) in enumerate(vals):
+        vals = [("MVRV", btc.get("mvrv"), 1, 3, "günstig", "teuer"),
+                ("Mayer", btc.get("mayer"), 0.8, 2.4, "günstig", "überhitzt")]
+        for i, (lab, v, lo, hi, low_w, high_w) in enumerate(vals):
             if v is None:
                 continue
-            x0 = PAD + 0.18 + i * 1.75
+            x0 = PAD + 0.18 + i * 2.15
             col = GOOD_T if v < lo else BAD_T if v > hi else FG
+            word = low_w if v < lo else high_w if v > hi else "neutral"
             ax.text(x0, y + 0.47, lab, color=MUTED, fontsize=7.5, va="top")
-            ax.text(x0 + 0.62, y + 0.42, f"{v:.2f}".replace(".", ","), color=col, fontsize=12, fontweight="bold", va="top")
+            ax.text(x0 + 0.5, y + 0.42, f"{v:.2f}".replace(".", ","), color=col, fontsize=12, fontweight="bold", va="top")
+            ax.text(x0 + 1.05, y + 0.47, word, color=col, fontsize=7.5, va="top")
         if btc.get("days") is not None:
-            ax.text(W - PAD - 0.18, y + 0.47, f"{btc['days']} Tage seit Halving", color=MUTED, fontsize=7.5,
+            ax.text(W - PAD - 0.18, y + 0.14, f"{btc['days']} Tage seit Halving", color=MUTED, fontsize=7.5,
                     va="top", ha="right")
+        notes = ["MVRV: Kurs ÷ Ø Einkaufspreis aller Bitcoin. Unter 1 = historisch günstig, über 3 = teuer.",
+                 "Mayer: Kurs ÷ 200-Tage-Schnitt. Unter 0,8 = günstig, über 2,4 = überhitzt.",
+                 "Halving alle ~4 Jahre. Hochs kamen bisher meist 12–18 Monate danach."]
+        for k, t in enumerate(notes):
+            ax.text(PAD + 0.18, y + 0.85 + k * 0.18, t, color=MUTED, fontsize=6.5, va="top")
         y += btc_h
 
     ax.text(W / 2, H - 0.25, "Hinweise zum Genauer-Hinschauen – keine Anlageberatung.",
