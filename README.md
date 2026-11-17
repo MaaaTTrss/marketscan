@@ -161,15 +161,13 @@ mit virtuell 1.000 $ für 30 Tage folgt (live ab dem Start, plus Rückblick übe
 ### Schnelle Telegram-Antworten (optional, ~1 Minute statt bis zu 15)
 
 Braucht ein kostenloses Cloudflare-Konto. Ablauf: Telegram → Cloudflare-Worker → startet GitHub-Lauf → Antwort.
-1. Auf cloudflare.com kostenlos registrieren → **Workers & Pages** → **Create** → „Hello World“-Worker anlegen →
-   **Edit code** → Inhalt von `cloudflare/worker.js` einfügen → **Deploy**. Die Adresse (…workers.dev) notieren.
-2. Auf GitHub einen Zugriffsschlüssel erstellen: Settings → Developer settings → Fine-grained tokens → Generate:
-   nur Repository *marketscan*, Recht **Contents: Read and write**.
-3. Im Worker unter Settings → Variables and Secrets anlegen: `TELEGRAM_BOT_TOKEN`, `CHAT_ID`, `GITHUB_TOKEN`,
-   `WEBHOOK_SECRET` (selbst ausgedacht, nur Buchstaben/Zahlen), `GITHUB_REPO` = `MaaaTTrss/marketscan`.
-4. Telegram sagen, wohin es Nachrichten schicken soll – im Browser öffnen:
-   `https://api.telegram.org/bot<TOKEN>/setWebhook?url=<WORKER-ADRESSE>&secret_token=<WEBHOOK_SECRET>`
-Rückgängig: `https://api.telegram.org/bot<TOKEN>/deleteWebhook` – dann antwortet wieder der 15-Minuten-Lauf.
+1. cloudflare.com: registrieren → **Workers & Pages** → **Create** → Worker anlegen → **Edit code** →
+   Inhalt von `cloudflare/worker.js` einfügen → **Deploy**. Adresse (…workers.dev) merken.
+2. GitHub-Zugriffsschlüssel erstellen (Fine-grained token, nur Projekt *marketscan*, **Contents: Read and write**)
+   und im Worker als Secret `GITHUB_TOKEN` speichern.
+3. Doppelklick auf `Telegram-Schnellantwort aktivieren.command`, Worker-Adresse einfügen, das angezeigte Passwort im
+   Worker als Secret `WEBHOOK_SECRET` speichern, Enter.
+Ausschalten: dasselbe Skript, statt der Adresse `aus` eingeben – dann antwortet wieder der 15-Minuten-Lauf.
 
 ### Alternativ: Telegram
 
